@@ -227,13 +227,14 @@ def main():
                     if came: notes.append(f"  - 新出现的日期：{'、'.join(came)}")
                     if gone: notes.append(f"  - 消失的日期：{'、'.join(gone)}")
                 elif "dates" not in st:
-                    notes.append(f"- {name}：首次记录，页面上有 {len(dates)} 个日期。")
+                    notes.append(f"- {name}：首次记录，页面上有 {len(dates)} 个日期。"
+                                 + ("页面上读不到日期，这个网页的变化提醒不起作用，需要人工定期查看。" if not dates else ""))
                 else:
-                    notes.append(f"- {name}：日期没有变化。")
+                    notes.append(f"- {name}：日期没有变化。" + ("（页面上读不到日期，需要人工定期查看）" if not dates else ""))
                 st.update(dates=dates, checked_at=stamp)
         except requests.RequestException as e:            # 网站打不开或拒绝访问：记一笔，不算需要人工核实
             code = getattr(getattr(e, "response", None), "status_code", "")
-            notes.append(f"- {name}：这次没抓到（{type(e).__name__} {code}）。旧数据未改动。")
+            notes.append(f"- {name}：这次没抓到（{type(e).__name__} {code}）。旧数据未改动，这个网站拒绝程序访问的话需要人工定期查看。")
         except Exception as e:                            # 一个来源出错不影响其他来源
             notes.append(f"- **{name}：抓取失败（{type(e).__name__}: {e}）。旧数据未改动。**")
 

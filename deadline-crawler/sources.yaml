@@ -10,7 +10,9 @@ sources:
     url: https://content.commonapp.org/Files/ReqGrid.pdf
 
   # ---------- 英国（前 10 所都走 UCAS，日期统一） ----------
-  - {name: UCAS 关键日期, type: watch, url: "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply"}
+  # UCAS 的总览页日期要靠网页脚本加载，程序读不到，所以改盯 UCAS 的截止日事件页和帝国理工的截止日页（都是直接写在页面里的）。
+  - {name: UCAS 1 月截止日, type: watch, url: "https://www.ucas.com/events/2027-entry-deadline-for-all-undergraduate-courses-except-those-with-a-15-october-deadline-475546"}
+  - {name: 帝国理工截止日页（UCAS 日期参照）, type: watch, url: "https://imperial.ac.uk/study/apply/undergraduate/process/deadlines/"}
 
   # ---------- 香港 ----------
   - {name: 香港大学 HKU, type: watch, url: "https://admissions.hku.hk/sites/default/files/2026-09/HKU_General_Information_NJ_2027.pdf"}
