@@ -8,7 +8,7 @@
 
 输出（都在 data/ 里）：
     deadlines.json / deadlines.csv   日期库：学校、轮次、截止日、申请费、来源、来源更新日、抓取时间
-    deadlines_web.js                 给网页原型用的精简版（学校 -> 各轮次截止日）
+    deadlines_web.js                 给网页原型用的精简版（学校 -> 各轮次截止日；英港澳学校另带来源和备注）
     changes.md                       每次运行和上一次相比的变化（新增、删除、日期改动、网页变化）
     state.json                       上次抓取的状态（用来判断有没有变化）
 
@@ -263,8 +263,18 @@ def main():
     ca = [r for r in new if r.get("source") == "Common App 要求总表"]
     for r in ca:
         web.setdefault(r["school"], {})[r["round"]] = r["deadline"]
+    # 英国、香港、澳洲（人工核实表）也放进去；info 里记每所学校的地区、来源和备注。截止日为空的记成 Rolling（滚动录取）。
+    info = {}
+    for r in new:
+        if r.get("source") != "学校官网（人工核实）":
+            continue
+        web.setdefault(r["school"], {})[r["round"]] = r["deadline"] or "Rolling"
+        i = info.setdefault(r["school"], {"region": r["region"], "source": r["source"], "source_url": r["source_url"],
+                                          "verified_on": r["source_updated"], "notes": {}})
+        if r["note"]:
+            i["notes"][r["round"]] = r["note"]
     meta = {"generated_at": stamp, "source": "Common App 要求总表", "source_url": next((r["source_url"] for r in ca), ""),
-            "source_updated": next((r["source_updated"] for r in ca), ""), "schools": web}
+            "source_updated": next((r["source_updated"] for r in ca), ""), "schools": web, "info": info}
     (DATA / "deadlines_web.js").write_text("// 由 crawler.py 生成，不要手改。\nwindow.DEADLINES = " + json.dumps(meta, ensure_ascii=False, separators=(",", ":")) + ";\n", "utf-8")
     with (DATA / "deadlines.csv").open("w", newline="", encoding="utf-8-sig") as f:
         cols = ["region", "school", "school_type", "round", "deadline", "note", "fee_us", "fee_intl", "source", "source_url", "source_updated", "fetched_at"]
