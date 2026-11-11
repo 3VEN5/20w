@@ -132,7 +132,7 @@ def parse_commonapp(pdf_bytes, url):
         if seen[r["school"]] > 1:
             r["school"] += f"（总表第 {seen[r['school']]} 行，请核对）"
         for rnd, d in r["rounds"].items():
-            rows.append({"school": r["school"], "school_type": r["type"], "round": rnd, "deadline": d,
+            rows.append({"region": "美国", "school": r["school"], "school_type": r["type"], "round": rnd, "deadline": d, "note": "",
                          "fee_us": r["fee_us"], "fee_intl": r["fee_intl"],
                          "source": "Common App 要求总表", "source_url": url, "source_updated": updated})
     return rows
@@ -140,13 +140,16 @@ def parse_commonapp(pdf_bytes, url):
 
 # ---------------------------------------------------------------- 网页监控
 def page_text(html_bytes):
+    if html_bytes[:5] == b"%PDF-":                      # 有些学校把日期放在 PDF 传单里
+        with pdfplumber.open(io.BytesIO(html_bytes)) as pdf:
+            return " ".join((p.extract_text() or "") for p in pdf.pages)
     s = html_bytes.decode("utf-8", "ignore")
     s = re.sub(r"(?is)<(script|style|noscript)\b.*?</\1>", " ", s)
     s = re.sub(r"(?s)<[^>]+>", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
-DATEISH = re.compile(r"\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}"
+DATEISH = re.compile(r"(?i)\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}"
                      r"|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}"
                      r"|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}/\d{1,2}/\d{4})")
 
@@ -214,35 +217,56 @@ def main():
                     notes.append(f"- {name}：网页没有变化。")
                     continue
                 text = page_text(raw)
-                h = hashlib.sha256(text.encode()).hexdigest()
-                dates = sorted(set(DATEISH.findall(text)))[:30]
+                dates = sorted({" ".join(d.split()) for d in DATEISH.findall(text)})[:300]
                 st = state.setdefault(url, {})
-                if st.get("hash") and st["hash"] != h:
-                    gone = sorted(set(st.get("dates", [])) - set(dates))
-                    came = sorted(set(dates) - set(st.get("dates", [])))
-                    notes.append(f"- **{name}：网页有变化，需要人工核实。** {url}")
+                # 只比较页面上出现的日期。整页内容每次都会有小变动（广告、时间戳），比较整页会天天误报。
+                if "dates" in st and st["dates"] != dates:
+                    gone = sorted(set(st["dates"]) - set(dates))
+                    came = sorted(set(dates) - set(st["dates"]))
+                    notes.append(f"- **{name}：官网页面上的日期有变化，请人工核实并更新 manual_deadlines.csv。** {url}")
                     if came: notes.append(f"  - 新出现的日期：{'、'.join(came)}")
                     if gone: notes.append(f"  - 消失的日期：{'、'.join(gone)}")
-                elif not st.get("hash"):
-                    notes.append(f"- {name}：首次记录网页内容。")
+                elif "dates" not in st:
+                    notes.append(f"- {name}：首次记录，页面上有 {len(dates)} 个日期。")
                 else:
-                    notes.append(f"- {name}：网页没有变化。")
-                st.update(hash=h, dates=dates, checked_at=stamp)
+                    notes.append(f"- {name}：日期没有变化。")
+                st.update(dates=dates, checked_at=stamp)
+        except requests.RequestException as e:            # 网站打不开或拒绝访问：记一笔，不算需要人工核实
+            code = getattr(getattr(e, "response", None), "status_code", "")
+            notes.append(f"- {name}：这次没抓到（{type(e).__name__} {code}）。旧数据未改动。")
         except Exception as e:                            # 一个来源出错不影响其他来源
             notes.append(f"- **{name}：抓取失败（{type(e).__name__}: {e}）。旧数据未改动。**")
 
-    new.sort(key=lambda r: (r["school"], ROUNDS.index(r["round"]) if r["round"] in ROUNDS else 9))
+    # 人工核实过的日期表（英国、香港、澳洲）：每次运行都整表重新读入
+    mf = ROOT / "manual_deadlines.csv"
+    if mf.exists():
+        with mf.open(encoding="utf-8-sig") as f:
+            manual = [{"region": r["region"], "school": r["school"], "school_type": "", "round": r["round"], "deadline": r["deadline"],
+                       "note": r["note"], "fee_us": "", "fee_intl": "", "source": "学校官网（人工核实）", "source_url": r["source_url"],
+                       "source_updated": r["verified_on"], "fetched_at": stamp} for r in csv.DictReader(f)]
+        mine = [r for r in new if r.get("source") == "学校官网（人工核实）"]
+        changes = diff(mine, manual)
+        new = [r for r in new if r.get("source") != "学校官网（人工核实）"] + manual
+        if changes and mine:
+            notes.append(f"- 人工日期表：{len(changes)} 处变化。"); notes += ["  " + c.replace("**", "") for c in changes]
+        elif not mine:
+            notes.append(f"- 人工日期表：首次导入 {len(manual)} 条（{len({r['school'] for r in manual})} 所学校）。")
+    for r in new:                                       # 旧版本生成的记录没有这两列，补上
+        r.setdefault("region", "美国"); r.setdefault("note", "")
+
+    new.sort(key=lambda r: (r["region"], r["school"], ROUNDS.index(r["round"]) if r["round"] in ROUNDS else 9))
     payload = {"generated_at": stamp, "count": len(new), "deadlines": new}
     dl_f.write_text(json.dumps(payload, ensure_ascii=False, indent=1), "utf-8")
     # 给网页原型用的精简版：学校 -> 各轮次截止日
     web = {}
-    for r in new:
+    ca = [r for r in new if r.get("source") == "Common App 要求总表"]
+    for r in ca:
         web.setdefault(r["school"], {})[r["round"]] = r["deadline"]
-    meta = {"generated_at": stamp, "source": "Common App 要求总表", "source_url": next((r["source_url"] for r in new), ""),
-            "source_updated": next((r["source_updated"] for r in new), ""), "schools": web}
+    meta = {"generated_at": stamp, "source": "Common App 要求总表", "source_url": next((r["source_url"] for r in ca), ""),
+            "source_updated": next((r["source_updated"] for r in ca), ""), "schools": web}
     (DATA / "deadlines_web.js").write_text("// 由 crawler.py 生成，不要手改。\nwindow.DEADLINES = " + json.dumps(meta, ensure_ascii=False, separators=(",", ":")) + ";\n", "utf-8")
     with (DATA / "deadlines.csv").open("w", newline="", encoding="utf-8-sig") as f:
-        cols = ["school", "school_type", "round", "deadline", "fee_us", "fee_intl", "source", "source_url", "source_updated", "fetched_at"]
+        cols = ["region", "school", "school_type", "round", "deadline", "note", "fee_us", "fee_intl", "source", "source_url", "source_updated", "fetched_at"]
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
         w.writeheader(); w.writerows(new)
     state_f.write_text(json.dumps(state, ensure_ascii=False, indent=1), "utf-8")
