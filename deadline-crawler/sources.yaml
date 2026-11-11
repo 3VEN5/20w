@@ -1,0 +1,18 @@
+# 数据来源配置。加学校、加网页都改这个文件，不用改 crawler.py。
+#
+# type: commonapp_grid  自动解析 Common App 要求总表 PDF（美国学校，每周抓一次即可）
+# type: watch           只监控网页有没有变化，变了就在 changes.md 里提醒人工去核实
+#                       （英国、香港、加拿大、澳洲的学校官网结构各不相同，先用这种方式）
+
+sources:
+  - name: Common App 要求总表
+    type: commonapp_grid
+    url: https://content.commonapp.org/Files/ReqGrid.pdf
+
+  # 下面是 watch 的写法示例。网址请填你们核实过的官方页面，去掉 # 即可生效。
+  # - name: UCAS 关键日期
+  #   type: watch
+  #   url: （填 UCAS 官方的日期页面网址）
+  # - name: 香港大学本科非联招
+  #   type: watch
+  #   url: （填港大官方的申请日期页面网址）

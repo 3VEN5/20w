@@ -1,0 +1,35 @@
+# 每周一北京时间早上 8 点自动跑一次爬虫，有变化就把新的日期库提交回仓库。
+name: 抓取截止日期
+on:
+  schedule:
+    - cron: "0 0 * * 1"     # UTC 周一 00:00 = 北京时间周一 08:00
+  workflow_dispatch:         # 也可以在 GitHub 网页的 Actions 页面手动点运行
+permissions:
+  contents: write
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deadline-crawler
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: 运行爬虫
+        id: crawl
+        run: python crawler.py || echo "need_review=true" >> "$GITHUB_OUTPUT"
+      - name: 提交变化
+        run: |
+          git config user.name "deadline-bot"
+          git config user.email "deadline-bot@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || git commit -m "更新截止日期库"
+          git push
+      - name: 有需要人工核实的变化时让本次运行显示为失败（GitHub 会发邮件提醒）
+        if: steps.crawl.outputs.need_review == 'true'
+        run: |
+          head -40 data/changes.md
+          exit 1
