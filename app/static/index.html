@@ -162,7 +162,7 @@ function blankAdd(){ return {school:"", round:"", deadline:"", reason:"", src:""
 function blankRow(){ return {what:"", owner:"家长", due:""}; }
 function fresh(){
   return { role: D.me.role === "owner" ? "o" : "c", tab:{c:"today", o:"board", s:"settings"}, pick:null, gen:null, undo:null, add:blankAdd(),
-           filter:"全部", lf:{consultant:"全部", student:"全部"}, open:null,
+           filter:"全部", lf:{consultant:"全部", student:"全部"}, open:null, viewAs:null,
            cap:{student:null, text:"", busy:false, res:null, off:{}, offF:{}, rows:[blankRow()]}, newStu:false };
 }
 
@@ -307,7 +307,8 @@ function addSchoolCard(name){
 }
 
 /* ---------- 顾问端 ---------- */
-const myStudents = () => D.students.filter(s => D.me.role === "owner" || s.consultant_id === D.me.id);
+const viewer = () => D.me.role === "owner" ? S.viewAs : D.me.id;          // 老板可以"以某位顾问的身份看"，空 = 看全部
+const myStudents = () => D.students.filter(s => !viewer() ? true : s.consultant_id === viewer());
 const mine = () => { const names = new Set(myStudents().map(s => s.name)); return D.items.filter(i => names.has(i.student)); };
 function todayLists(){
   const m = mine(), unagreed = {};
@@ -482,7 +483,8 @@ function render(){
   const tab = S.tab[S.role], n = todayCount();
   document.getElementById("tabs").innerHTML = TABS[S.role].length > 1 ? TABS[S.role].map(([id, label]) => `<button data-tab="${id}" ${id === tab ? 'aria-current="page"' : ""}>${label}${id === "today" && n ? `<span class="n">${n}</span>` : ""}</button>`).join("") : "";
   const undo = S.undo ? `<div class="card" style="background:var(--green-bg);border-color:transparent;box-shadow:none;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>已记下：${esc(S.undo.label)}</span><button class="btn ghost" data-act="undo" style="padding:4px 12px">撤销</button></div>` : "";
-  document.getElementById("main").innerHTML = undo + ({c:C, o:O, s:SET}[S.role])[tab]();
+  const asBar = S.role === "c" && D.me.role === "owner" ? `<div class="pills"><span class="muted small" style="align-self:center">以谁的身份看：</span>${[["", "全部学生"], ...D.users.filter(u => u.active && D.students.some(s => s.consultant_id === u.id)).map(u => [u.id, u.name])].map(([id, n]) => `<button data-viewas="${esc(id)}" aria-pressed="${(S.viewAs || "") === id}">${esc(n)}</button>`).join("")}${S.viewAs ? '<span class="muted small" style="align-self:center">这是该顾问看到的界面；你在这里的操作仍记在你名下</span>' : ""}</div>` : "";
+  document.getElementById("main").innerHTML = undo + asBar + ({c:C, o:O, s:SET}[S.role])[tab]();
 }
 function toast(t){ const el = document.getElementById("toast"); el.textContent = t; el.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => el.hidden = true, 2600); }
 async function copy(text){
@@ -551,10 +553,11 @@ async function act(name, ds, el){
   }
 }
 document.addEventListener("click", e => {
-  const el = e.target.closest("[data-act],[data-role],[data-tab],[data-pick],[data-opick],[data-filter],[data-round],[data-memschool],[data-capstu]"); if (!el) return;
+  const el = e.target.closest("[data-act],[data-role],[data-tab],[data-pick],[data-opick],[data-filter],[data-round],[data-memschool],[data-capstu],[data-viewas]"); if (!el) return;
   if (el.tagName === "TR" && e.target.closest("button,a,input,select")) return;
   const ds = el.dataset;
   if (ds.role){ S.role = ds.role; S.undo = null; return render(); }
+  if (ds.viewas !== undefined){ S.viewAs = ds.viewas || null; S.pick = null; S.cap.student = null; S.add = blankAdd(); return render(); }
   if (ds.tab){ S.tab[S.role] = ds.tab; return render(); }
   if (ds.pick){ S.pick = ds.pick; S.gen = null; S.open = null; S.add = blankAdd(); return render(); }
   if (ds.capstu){ S.cap = {...S.cap, student: ds.capstu, res:null, text:""}; return render(); }
