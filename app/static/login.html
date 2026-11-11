@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>登录 · 申请进度助手</title>
+<style>
+:root{--bg:#F3F5F4;--ink:#16282A;--muted:#5B6C6D;--line:#D7E0DF;--accent:#2F5D62;--red:#B4372A}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;font-size:15px}
+form{background:#fff;border:1px solid var(--line);border-radius:14px;padding:28px 24px;width:min(360px,92vw);box-shadow:0 6px 18px rgba(22,40,42,.07)}
+h1{font-size:20px;margin:0 0 4px} p{color:var(--muted);margin:0 0 18px;font-size:13px}
+label{display:block;font-size:13px;color:var(--muted);margin-top:12px}
+input{display:block;width:100%;font:inherit;border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-top:4px}
+button{width:100%;margin-top:18px;border:0;border-radius:8px;padding:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+.err{color:var(--red);font-size:13px;min-height:20px;margin-top:10px}
+</style>
+</head>
+<body>
+<form id="f">
+  <h1>申请进度助手</h1>
+  <p>账号由机构负责人开通。忘记密码请找负责人重置。</p>
+  <label>登录名<input name="login" autocomplete="username" required></label>
+  <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+  <button>登录</button>
+  <div class="err" id="err"></div>
+</form>
+<script>
+document.getElementById("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target), err = document.getElementById("err");
+  err.textContent = "";
+  const r = await fetch("/api/login", {method:"POST", headers:{"Content-Type":"application/json", "X-App":"1"},
+    body: JSON.stringify({login: fd.get("login"), password: fd.get("password")})});
+  if (r.ok) location.href = "/";
+  else { const j = await r.json().catch(() => ({})); err.textContent = j.detail || "登录失败"; }
+});
+</script>
+</body>
+</html>
