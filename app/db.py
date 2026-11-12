@@ -46,6 +46,15 @@ def connect():
 def init():
     with connect() as con:
         con.executescript(SCHEMA)
+        # 旧数据库升级：给已有的表补上后来加的列
+        have = lambda t: {r[1] for r in con.execute(f"PRAGMA table_info({t})")}
+        for col in ("round", "sdl", "region"):
+            if col not in have("item"):
+                con.execute(f"ALTER TABLE item ADD COLUMN {col} TEXT")
+        if "rolling" not in have("item"):
+            con.execute("ALTER TABLE item ADD COLUMN rolling INTEGER NOT NULL DEFAULT 0")
+        if "region" not in have("custom_school"):
+            con.execute("ALTER TABLE custom_school ADD COLUMN region TEXT NOT NULL DEFAULT ''")
 
 
 def now():

@@ -187,3 +187,16 @@ def test_image_extract(setup, monkeypatch):
     assert "雅思送分费" in out["transcript"]
     assert sent["url"].startswith("https://dashscope.aliyuncs.com") and sent["body"]["model"] == "qwen-vl-max"
     assert sent["body"]["messages"][0]["content"][1]["image_url"]["url"] == PNG
+
+
+def test_school_region_and_parent_note(setup):
+    a, wang, sid = setup
+    steps = [{"what": "递交 NUS（主批）", "owner": "机构", "due": "2027-02-10"}]
+    st = act(wang, "addschool", student=sid, school="NUS", round="主批", deadline="2027-02-15", region="新加坡", steps=steps, remember=True)
+    it = next(i for i in st["items"] if i["school"] == "NUS")
+    assert (it["region"], it["round"], it["sdl"], it["rolling"]) == ("新加坡", "主批", "2027-02-15", False)
+    assert st["memory"]["NUS"]["region"] == "新加坡"
+    assert "加入 NUS（新加坡，主批）" in st["logs"][0]["act"]
+    st = act(wang, "parentnote", student=sid, text="好的，下周我们去开存款证明")
+    assert st["logs"][0]["src"] == "微信回复" and st["logs"][0]["who"] == "张妈妈" and "存款证明" in st["logs"][0]["act"]
+    assert wang.post("/api/act", json={"op": "parentnote", "student": sid, "text": ""}, headers=H).status_code == 400

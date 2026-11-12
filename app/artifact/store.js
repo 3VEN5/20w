@@ -33,12 +33,12 @@ function buildState(){
     students: studs.map(([id, s]) => ({id, name: s.name, parent: s.parent, consultant: consOf.get(id), consultant_id: s.consultant})),
     items: [...RAW.items.entries()].filter(([, i]) => !i.deleted && sname.has(i.student_id))
       .map(([id, i]) => ({id, student: sname.get(i.student_id), what: i.what, owner: i.owner, due: i.due, created: i.created, agreed: i.agreed || null,
-        replied: i.replied || null, replyText: i.reply_text || null, done: i.done || null, school: i.school || null, chases: i.chases || []}))
+        replied: i.replied || null, replyText: i.reply_text || null, done: i.done || null, school: i.school || null, round: i.round || "", sdl: i.sdl || "", region: i.region || "", rolling: !!i.rolling, chases: i.chases || []}))
       .sort((a, b) => a.due.localeCompare(b.due)),
     logs: [...RAW.logs.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 3000).map(([id, l]) => ({id, n: l.n, date: l.at.slice(0, 10), time: l.at.slice(11),
       who: l.who || memberName(l.uid), src: l.src, act: l.act, student: sname.get(l.student_id) || "", consultant: consOf.get(l.student_id) || "",
       undone: !!l.undone, canUndo: !!l.undo && !l.undone && l.uid === UID && l.n >= undoAfter})),
-    memory: Object.fromEntries([...RAW.memory.values()].map(m => [m.school, {d: m.d, by: m.by, on: m.on, src: m.src || ""}])),
+    memory: Object.fromEntries([...RAW.memory.values()].map(m => [m.school, {d: m.d, by: m.by, on: m.on, src: m.src || "", region: m.region || ""}])),
   };
 }
 
@@ -54,11 +54,11 @@ async function log(student_id, src, act, who, undo){
   await W.set("logs", id, {student_id: student_id || null, at: stampCN(), n: Date.now(), uid: UID, who: who || null, src, act, undo: undo || null, undone: false});
   return id;
 }
-async function addItem(sid, what, owner, due, school){
+async function addItem(sid, what, owner, due, school, meta){
   what = txt(what, "事项", 120); due = date(due, "截止日");
   if (!OWNERS.includes(owner)) bad("负责人只能是学生、家长、学校或机构");
   const id = newId();
-  await W.set("items", id, {student_id: sid, what, owner, due, created: todayCN(), agreed: null, replied: null, reply_text: null, done: null, school: school || null, deleted: false, chases: [], n: Date.now()});
+  await W.set("items", id, {student_id: sid, what, owner, due, created: todayCN(), agreed: null, replied: null, reply_text: null, done: null, school: school || null, ...(meta || {}), deleted: false, chases: [], n: Date.now()});
   return id;
 }
 const meName = () => memberName(UID);
@@ -79,6 +79,8 @@ const ACT = {
   async replied(b){ const it = item(b.item), d = date(b.date || todayCN()), t = txt(b.text, "家长原话", 300, false);
     await W.upd("items", it.id, {replied: d, reply_text: t || null});
     return log(it.student_id, "微信回复", `家长 ${mdd(d)} 回复${t ? "：“" + t + "”" : ""}（${meName()}记录）`, student(it.student_id).parent, {t:"replied", id: it.id, old: [it.replied || null, it.reply_text || null]}); },
+  async parentnote(b){ const s = student(b.student), t = txt(b.text, "家长原话", 300);
+    return log(s.id, "微信回复", `家长回复：“${t}”（${meName()}记录，不对应具体事项）`, s.parent, {t:"none"}); },
   async sent(b){ const s = student(b.student); return log(s.id, "反馈家长", `已发${txt(b.what, "内容", 20)}给家长`, null, {t:"none"}); },
   async additems(b){ const s = student(b.student), items = (b.items || []).slice(0, 50); if (!items.length) bad("没有要写入的事项");
     items.forEach(x => { txt(x.what, "事项", 120); date(x.due, "截止日"); if (!OWNERS.includes(x.owner)) bad("负责人不对"); });
@@ -99,18 +101,19 @@ const ACT = {
     const dbd = b.db_deadline || null, source = txt(b.source, "来源", 200, false), reason = txt(b.reason, "改动原因", 200, false);
     const steps = (b.steps || []).slice(0, 20); if (!steps.length) bad("没有要写入的事项");
     steps.forEach(x => { txt(x.what, "事项", 120); date(x.due, "截止日"); });
-    const ids = []; for (const x of steps) ids.push(await addItem(s.id, x.what, x.owner, x.due, school));
+    const region = txt(b.region, "地区", 20, false) || "其他", rolling = rnd === "滚动录取" || !!b.rolling;
+    const ids = []; for (const x of steps) ids.push(await addItem(s.id, x.what, x.owner, x.due, school, {round: rnd, sdl: deadline, region, rolling}));
     const me = meName();
     const dl = dbd && dbd !== deadline ? `日期库是 ${dbd}，${me}改为 ${deadline}` + (reason ? `（${reason}）` : "")
       : dbd ? `截止日 ${deadline}（日期库，${me}已核对）` : rnd === "滚动录取" || b.rolling ? `滚动录取，计划递交日 ${deadline} 由${me}和学生商定` : `截止日 ${deadline}，${me}自填`;
     const edited = steps.filter(x => x.edited).length;
-    const lid = await log(s.id, "加学校", `加入 ${school}（${rnd}），${dl}${source ? "，来源：" + source : ""}；写入 ${ids.length} 条事项：` + steps.map(x => `${x.what} ${mdd(x.due)}`).join("；")
+    const lid = await log(s.id, "加学校", `加入 ${school}（${region}，${rnd}），${dl}${source ? "，来源：" + source : ""}；写入 ${ids.length} 条事项：` + steps.map(x => `${x.what} ${mdd(x.due)}`).join("；")
       + (edited ? `。其中 ${edited} 条的截止日由顾问改过` : ""), null, {t:"items", ids});
     if (b.remember && !dbd && rnd !== "滚动录取" && !b.rolling){
       const key = encodeURIComponent(school).replace(/[^A-Za-z0-9_\-.~:@+]/g, "_").slice(0, 180) || "school";
       const old = [...RAW.memory.entries()].find(([, m]) => m.school === school);
       const id = old ? old[0] : key;
-      await W.set("memory", id, {school, d: {...(old ? old[1].d : {}), [rnd]: deadline}, by: me, on: todayCN(), src: source}); }
+      await W.set("memory", id, {school, d: {...(old ? old[1].d : {}), [rnd]: deadline}, by: me, on: todayCN(), src: source, region}); }
     return lid; },
   async editdue(b){ const it = item(b.item), nd = date(b.due, "新截止日"); if (nd === it.due) bad("日期没有变化");
     const reason = txt(b.reason, "改动原因", 200, false);
@@ -171,11 +174,11 @@ async function api(name, payload = {}, label){
   S.undo = label && lid ? {log: lid, label} : null;
   render();
 }
-async function extract(sid, text, images = []){
+async function extract(sid, text, images = [], mode = ""){
   const s = student(sid);
   const open = [...RAW.items.entries()].filter(([, i]) => i.student_id === s.id && !i.deleted && !i.done).map(([id, i]) => ({id, what: i.what, owner: i.owner, due: i.due}));
   const prompt = AI_PROMPT.replace("{today}", todayCN()).replace("{student}", s.name).replace("{parent}", s.parent)
-    .replace("{items}", open.map(i => `${i.id}｜${i.what}｜${i.owner}｜${i.due}`).join("\n") || "（没有）").replace("{imgnote}", images.length ? IMG_NOTE.replace("{n}", images.length) : "").replace("{text}", () => text.trim() || "（没有文字，只有图片）");
+    .replace("{items}", open.map(i => `${i.id}｜${i.what}｜${i.owner}｜${i.due}`).join("\n") || "（没有）").replace("{imgnote}", (images.length ? IMG_NOTE.replace("{n}", images.length) : "") + (mode === "reply" ? REPLY_NOTE : "")).replace("{text}", () => text.trim() || "（没有文字，只有图片）");
   let out;
   try { out = await SAMPLE.json(prompt, images.length ? {images} : undefined); }
   catch (e){ toast(e && e.code === "rate_limited" ? "AI 有点忙，请稍后再试" : e && e.code === "not_granted" ? "没有允许使用 AI，可以用手动添加" : "AI 整理失败，请再试一次或手动添加"); throw e; }
@@ -183,6 +186,7 @@ async function extract(sid, text, images = []){
   const transcript = images.length ? String(out.transcript || "").slice(0, 4000) : "";
   return {...aiCheck(out, text + "\n" + transcript, open), transcript};      // 图片里的原话要在转写文字里，转写给顾问对照图片核对
 }
+const REPLY_NOTE = `\n这段内容是家长在微信里的回复。重点判断它是在回复上面哪个已有事项（放进 found，kind 写 replied，text 写家长的原话）；家长说已经办好的写 done。只有家长明确提到新的待办时才放进 newItems。\n`;
 const IMG_NOTE = `
 另附 {n} 张图片（可能是微信聊天截图、学校或考试机构的邮件截图、手写笔记照片）。
 先把图片里和申请事项有关的文字逐字转写进 transcript：照抄，不翻译、不改写；看不清的地方写[看不清]；文书、作文、推荐信正文不要转写。

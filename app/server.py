@@ -154,7 +154,7 @@ def state(u):
         logs = [dict(r) for r in con.execute("SELECT * FROM log WHERE agency_id = ? ORDER BY id DESC LIMIT 3000", (aid,))]
         mem = {}
         for r in con.execute("SELECT * FROM custom_school WHERE agency_id = ? ORDER BY school", (aid,)):
-            m = mem.setdefault(r["school"], {"d": {}, "by": r["by"], "on": r["on_date"], "src": r["src"]})
+            m = mem.setdefault(r["school"], {"d": {}, "by": r["by"], "on": r["on_date"], "src": r["src"], "region": r["region"]})
             m["d"][r["round"]] = r["date"]
     cons_of = {s["id"]: uname.get(s["consultant_id"], "") for s in studs}
     undo_after = (db.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M")
@@ -164,6 +164,7 @@ def state(u):
         "students": [{"id": s["id"], "name": s["name"], "parent": s["parent"], "consultant": cons_of[s["id"]], "consultant_id": s["consultant_id"]} for s in studs],
         "items": [{"id": i["id"], "student": sname[i["student_id"]], "what": i["what"], "owner": i["owner"], "due": i["due"], "created": i["created"],
                    "agreed": i["agreed"], "replied": i["replied"], "replyText": i["reply_text"], "done": i["done"], "school": i["school"],
+                   "round": i["round"] or "", "sdl": i["sdl"] or "", "region": i["region"] or "", "rolling": bool(i["rolling"]),
                    "chases": chases.get(i["id"], [])} for i in items if i["student_id"] in sname],
         "logs": [{"id": l["id"], "date": l["at"][:10], "time": l["at"][11:], "who": l["who"], "src": l["src"], "act": l["act"],
                   "student": sname.get(l["student_id"], ""), "consultant": cons_of.get(l["student_id"], ""), "undone": bool(l["undone"]),
@@ -194,12 +195,12 @@ class Ctx:
         self.con.execute("INSERT INTO log (agency_id, student_id, at, user_id, who, src, act, undo) VALUES (?,?,?,?,?,?,?,?)",
                          (self.aid, student_id, db.stamp(), self.u["id"], who or self.u["name"], src, act, json.dumps(undo) if undo else None))
 
-    def add_item(self, sid, what, owner, due, school=None):
+    def add_item(self, sid, what, owner, due, school=None, rnd=None, sdl=None, region=None, rolling=False):
         what, due = txt(what, "事项", 120), date(due, "截止日")
         if owner not in OWNERS:
             bad("负责人只能是学生、家长、学校或机构")
-        cur = self.con.execute("INSERT INTO item (agency_id, student_id, what, owner, due, created, school) VALUES (?,?,?,?,?,?,?)",
-                               (self.aid, sid, what, owner, due, self.today, school))
+        cur = self.con.execute("INSERT INTO item (agency_id, student_id, what, owner, due, created, school, round, sdl, region, rolling) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                               (self.aid, sid, what, owner, due, self.today, school, rnd, sdl, region, int(bool(rolling))))
         return cur.lastrowid
 
 
@@ -243,6 +244,12 @@ def a_replied(c, b):
           undo={"t": "replied", "id": it["id"], "old": [it["replied"], it["reply_text"]]})
 
 
+def a_parentnote(c, b):
+    s = c.student(b.get("student"))
+    t = txt(b.get("text"), "家长原话", 300)
+    c.log(s["id"], "微信回复", f"家长回复：“{t}”（{c.u['name']}记录，不对应具体事项）", who=s["parent"], undo={"t": "none"})
+
+
 def a_sent(c, b):
     s = c.student(b.get("student"))
     c.log(s["id"], "反馈家长", f"已发{txt(b.get('what'), '内容', 20)}给家长", undo={"t": "none"})
@@ -283,7 +290,9 @@ def a_addschool(c, b):
     source = txt(b.get("source"), "来源", 200, required=False)
     reason = txt(b.get("reason"), "改动原因", 200, required=False)
     steps = b.get("steps") or bad("没有要写入的事项")
-    ids = [c.add_item(s["id"], x.get("what"), x.get("owner"), x.get("due"), school) for x in steps[:20]]
+    region = txt(b.get("region"), "地区", 20, required=False) or "其他"
+    rolling = rnd == "滚动录取" or bool(b.get("rolling"))
+    ids = [c.add_item(s["id"], x.get("what"), x.get("owner"), x.get("due"), school, rnd, deadline, region, rolling) for x in steps[:20]]
     if db_deadline and db_deadline != deadline:
         dl = f"日期库是 {db_deadline}，{c.u['name']}改为 {deadline}" + (f"（{reason}）" if reason else "")
     elif db_deadline:
@@ -293,11 +302,12 @@ def a_addschool(c, b):
     else:
         dl = f"截止日 {deadline}，{c.u['name']}自填"
     edited = [x for x in steps if x.get("edited")]
-    c.log(s["id"], "加学校", f"加入 {school}（{rnd}），{dl}{'，来源：' + source if source else ''}；写入 {len(ids)} 条事项："
+    c.log(s["id"], "加学校", f"加入 {school}（{region}，{rnd}），{dl}{'，来源：' + source if source else ''}；写入 {len(ids)} 条事项："
           + "；".join(f"{x['what']} {md(x['due'])}" for x in steps[:20]) + (f"。其中 {len(edited)} 条的截止日由顾问改过" if edited else ""),
           undo={"t": "items", "ids": ids})
-    if b.get("remember") and not db_deadline and rnd != "滚动录取":
-        c.con.execute("INSERT OR REPLACE INTO custom_school VALUES (?,?,?,?,?,?,?)", (c.aid, school, rnd, deadline, c.u["name"], c.today, source))
+    if b.get("remember") and not db_deadline and not rolling:
+        c.con.execute("INSERT OR REPLACE INTO custom_school (agency_id, school, round, date, by, on_date, src, region) VALUES (?,?,?,?,?,?,?,?)",
+                      (c.aid, school, rnd, deadline, c.u["name"], c.today, source, region))
 
 
 def a_editdue(c, b):
@@ -436,7 +446,7 @@ async def extract(request: Request, u=Depends(current_user)):
     if images and not ai.images_enabled():
         bad("还没有开通图片识别，请把文字贴进来")
     try:
-        return ai.extract(text, s["name"], s["parent"], open_items, db.today(), images)
+        return ai.extract(text, s["name"], s["parent"], open_items, db.today(), images, reply=b.get("mode") == "reply")
     except ai.AIError as e:
         bad(str(e), 502)
 

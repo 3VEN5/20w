@@ -33,6 +33,10 @@ def images_enabled():
     return bool(os.environ.get("AI_VISION_MODEL") and (os.environ.get("AI_VISION_API_KEY") or os.environ.get("AI_API_KEY")))
 
 
+REPLY_NOTE = """
+这段内容是家长在微信里的回复。重点判断它是在回复上面哪个已有事项（放进 found，kind 写 replied，text 写家长的原话）；家长说已经办好的写 done。只有家长明确提到新的待办时才放进 newItems。
+"""
+
 IMG_NOTE = """
 另附 {n} 张图片（可能是微信聊天截图、学校或考试机构的邮件截图、手写笔记照片）。
 先把图片里和申请事项有关的文字逐字转写进 transcript：照抄，不翻译、不改写；看不清的地方写[看不清]；文书、作文、推荐信正文不要转写。
@@ -81,10 +85,10 @@ def _json(content):
     return json.loads(content[a:b + 1] if a >= 0 and b > a else content)
 
 
-def extract(text, student, parent, open_items, today, images=()):
+def extract(text, student, parent, open_items, today, images=(), reply=False):
     items = "\n".join(f"{i['id']}｜{i['what']}｜{i['owner']}｜{i['due']}" for i in open_items) or "（没有）"
     prompt = PROMPT.format(today=today, student=student, parent=parent, items=items,
-                           imgnote=IMG_NOTE.format(n=len(images)) if images else "", text=text or "（没有文字，只有图片）")
+                           imgnote=(IMG_NOTE.format(n=len(images)) if images else "") + (REPLY_NOTE if reply else ""), text=text or "（没有文字，只有图片）")
     if images:
         model, base = os.environ["AI_VISION_MODEL"], os.environ.get("AI_VISION_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
         key = os.environ.get("AI_VISION_API_KEY") or os.environ["AI_API_KEY"]
