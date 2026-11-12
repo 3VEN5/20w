@@ -139,11 +139,15 @@ def test_ai_check_drops_unquoted():
     out = {"newItems": [{"what": "付托福送分费", "owner": "家长", "due": "2026-11-22", "quote": "得让家长这周把 30 美元付了，最晚 22 号"},
                         {"what": "编出来的", "owner": "家长", "due": "2026-11-23", "quote": "原文里没有这句"},
                         {"what": "日期不对", "owner": "家长", "due": "2026-13-40", "quote": "托福送分还没下单"}],
-           "found": [{"kind": "done", "item": 999, "quote": "托福送分还没下单"}]}
+           "found": [{"kind": "done", "item": 999, "quote": "托福送分还没下单"},
+                     {"kind": "replied", "item": "1", "quote": "最晚 22 号"},                      # id 写成字符串也认
+                     {"kind": "note", "item": None, "text": "", "quote": "托福送分还没下单"}]}       # 对不上事项，只留痕
     r = ai.check(out, text, [{"id": 1}])
     assert [x["what"] for x in r["newItems"]] == ["付托福送分费", "日期不对"]
     assert r["newItems"][1]["due"] == ""                                  # 不合法的日期清空，让顾问填
     assert r["dropped"] == 2
+    assert [(f["kind"], f["item"]) for f in r["found"]] == [("replied", 1), ("note", None)]
+    assert "JSON" in ai.SYSTEM_PROMPT and "{" not in ai.USER_PROMPT.replace("{today}", "").replace("{student}", "").replace("{parent}", "").replace("{items}", "").replace("{imgnote}", "").replace("{text}", "")
 
 
 def test_pages_served(setup):
@@ -186,7 +190,9 @@ def test_image_extract(setup, monkeypatch):
     assert [x["what"] for x in out["newItems"]] == ["付雅思送分费"] and out["dropped"] == 1
     assert "雅思送分费" in out["transcript"]
     assert sent["url"].startswith("https://dashscope.aliyuncs.com") and sent["body"]["model"] == "qwen-vl-max"
-    assert sent["body"]["messages"][0]["content"][1]["image_url"]["url"] == PNG
+    assert sent["body"]["messages"][0]["role"] == "system" and sent["body"]["messages"][1]["content"][1]["image_url"]["url"] == PNG
+    st = act(wang, "found", student=sid, found=[{"kind": "note", "item": None, "text": "行，辛苦老师", "quote": "行，辛苦老师"}])
+    assert st["logs"][0]["src"] == "微信回复" and "辛苦老师" in st["logs"][0]["act"]
 
 
 def test_school_region_and_parent_note(setup):

@@ -89,7 +89,9 @@ const ACT = {
     return log(s.id, "录入", `${label}，确认 ${ids.length} 条事项：` + items.map(x => `${x.what}（${x.owner}，${mdd(x.due)}）`).join("；")
       + (quotes.length ? "。原话：" + quotes.map(q => `“${q.slice(0, 80)}”`).join(" / ") : ""), null, {t:"items", ids}); },
   async found(b){ const s = student(b.student); let last = null;
-    for (const f of (b.found || []).slice(0, 20)){ const it = item(f.item); if (it.student_id !== s.id) bad("事项不属于这个学生");
+    for (const f of (b.found || []).slice(0, 20)){
+      if (f.kind === "note"){ last = await log(s.id, "微信回复", `家长回复：“${txt(f.text || f.quote, "家长原话", 300)}”（从粘贴的内容识别，${meName()}确认，不对应具体事项）`, s.parent, {t:"none"}); continue; }
+      const it = item(f.item); if (it.student_id !== s.id) bad("事项不属于这个学生");
       const q = txt(f.quote, "原话", 300, false);
       if (f.kind === "replied"){ const d = date(f.date || todayCN());
         await W.upd("items", it.id, {replied: d, reply_text: txt(f.text, "原话", 300, false) || null});
@@ -174,44 +176,22 @@ async function api(name, payload = {}, label){
   S.undo = label && lid ? {log: lid, label} : null;
   render();
 }
-async function extract(sid, text, images = [], mode = ""){
+async function extract(sid, text, images = []){
   const s = student(sid);
   const open = [...RAW.items.entries()].filter(([, i]) => i.student_id === s.id && !i.deleted && !i.done).map(([id, i]) => ({id, what: i.what, owner: i.owner, due: i.due}));
-  const prompt = AI_PROMPT.replace("{today}", todayCN()).replace("{student}", s.name).replace("{parent}", s.parent)
-    .replace("{items}", open.map(i => `${i.id}｜${i.what}｜${i.owner}｜${i.due}`).join("\n") || "（没有）").replace("{imgnote}", (images.length ? IMG_NOTE.replace("{n}", images.length) : "") + (mode === "reply" ? REPLY_NOTE : "")).replace("{text}", () => text.trim() || "（没有文字，只有图片）");
+  const user = USER_PROMPT.replace("{today}", todayCN()).replace("{student}", s.name).replace("{parent}", s.parent)
+    .replace("{items}", () => open.map(i => `${i.id}｜${i.what}｜${i.owner}｜${i.due}`).join("\n") || "（没有）")
+    .replace("{imgnote}", images.length ? `（另附 ${images.length} 张图片）` : "").replace("{text}", () => text.trim() || "（没有文字，只有图片）");
   let out;
-  try { out = await SAMPLE.json(prompt, images.length ? {images} : undefined); }
+  try { out = await SAMPLE.json(SYSTEM_PROMPT + "\n\n下面是这一次的输入，请按上面的规则输出 JSON。\n" + user, images.length ? {images} : undefined); }
   catch (e){ toast(e && e.code === "rate_limited" ? "AI 有点忙，请稍后再试" : e && e.code === "not_granted" ? "没有允许使用 AI，可以用手动添加" : "AI 整理失败，请再试一次或手动添加"); throw e; }
   out = out || {};
   const transcript = images.length ? String(out.transcript || "").slice(0, 4000) : "";
   return {...aiCheck(out, text + "\n" + transcript, open), transcript};      // 图片里的原话要在转写文字里，转写给顾问对照图片核对
 }
-const REPLY_NOTE = `\n这段内容是家长在微信里的回复。重点判断它是在回复上面哪个已有事项（放进 found，kind 写 replied，text 写家长的原话）；家长说已经办好的写 done。只有家长明确提到新的待办时才放进 newItems。\n`;
-const IMG_NOTE = `
-另附 {n} 张图片（可能是微信聊天截图、学校或考试机构的邮件截图、手写笔记照片）。
-先把图片里和申请事项有关的文字逐字转写进 transcript：照抄，不翻译、不改写；看不清的地方写[看不清]；文书、作文、推荐信正文不要转写。
-quote 可以从下面的原文或 transcript 里一字不差地复制。
-`;
-const AI_PROMPT = `你是留学申请机构的助理，只做一件事：从顾问给的文字里找出"谁要在哪天前做什么"，以及已有事项的进展。
-今天是 {today}。学生：{student}；家长称呼：{parent}。
-
-这个学生现在没完成的事项（id｜事项｜负责人｜截止）：
-{items}
-
-规则：
-1. 只抽取明确的待办事项。负责人只能是：学生、家长、学校、机构（机构=顾问或机构自己）。
-2. 截止日写成 YYYY-MM-DD。原文是"22 号""下周一"这类说法时，按今天推算；原文没有日期就填空字符串，不要猜。
-3. 每一条都要附原文里的原话（quote），必须一字不差地从原文复制，不要改写、不要合并多句。
-4. 如果原文显示上面某个已有事项"家长已回复确认"或"已经完成"，放进 found，item 写对应的 id。不要把已有事项再当成新事项。
-5. 不写、不改、不翻译任何文书、活动描述、推荐信的内容。
-{imgnote}6. 只输出 JSON，格式：
-{"transcript":"图片转写，没有图片就填空字符串","newItems":[{"what":"...","owner":"家长","due":"2026-11-22","quote":"..."}],
- "found":[{"kind":"replied 或 done","item":"事项 id","date":"YYYY-MM-DD","text":"家长原话","quote":"..."}]}
-
-原文：
-<<<
-{text}
->>>`;
+// 提示词和服务器版 ai.py 一样（说明见 app/prompts.md）。改一处要同步另一处。
+const SYSTEM_PROMPT = "你是留学申请机构顾问的助理。顾问会给你一段材料，可能是见面笔记、微信聊天记录、家长的回复、学校或考试机构的邮件，也可能是这些内容的截图或照片。\n你的任务只有一个：把材料里和申请事项有关的信息整理成 JSON，供顾问核对后写入系统。你不直接面对家长和学生，不要寒暄，不要给建议。\n\n【要找的三类信息】\n一、新事项 newItems：材料里明确提到、但“已有事项”里没有的待办。写清做什么（what）、谁负责（owner）、最晚哪天（due）。\n二、已有事项的进展 found：\n  - 家长或学生对某个已有事项表示知道了、同意、会去办：kind 写 \"replied\"，item 写那个事项的 id。\n  - 某个已有事项已经办完：kind 写 \"done\"，item 写那个事项的 id。\n  - 家长的回复和任何已有事项都对不上，但值得留个记录（比如“收到，谢谢老师”）：kind 写 \"note\"，item 写 null。\n三、图片转写 transcript：有图片时，先把图片里和申请事项有关的文字逐字抄下来。\n\n【规则】\n1. owner 只能是这四个词之一：学生、家长、学校、机构。“机构”指顾问或机构自己要做的事；“学校”指学生所在中学要做的事，比如成绩单、推荐信。\n2. due 写成 YYYY-MM-DD。材料里是“22 号”“下周一”“月底”这类说法时，按“今天”的日期推算。材料里没有提到时间就写空字符串 \"\"，不要猜。\n3. 每一条都必须带 quote：从材料原文或你的 transcript 里一字不差复制的一小段原话，作为依据。不要改写，不要翻译，不要把两句拼成一句。找不到原话依据的内容不要输出。\n4. 不要把已有事项重复当成新事项。闲聊、没有明确动作的话，不要整理成事项。\n5. what 用简短的动宾短语，不超过 20 个字，比如“付托福送分费”“交 UCL 文书终稿”。\n6. found 里的 text 写家长或学生的原话，date 写这句话是哪天说的，材料里看不出来就写今天。\n7. 红线：不写、不改、不翻译、不评价任何文书、活动描述、推荐信的内容。材料里出现这些正文时直接跳过，transcript 里也不要抄。\n8. 有图片时，transcript 照抄图片里的文字，保留是谁说的（比如“家长：”“顾问：”），看不清的地方写 [看不清]。没有图片时 transcript 写 \"\"。\n9. 只输出一个 JSON 对象。不要输出解释，不要用 ``` 包起来。没有内容的数组写 []。\n\n【输出格式】\n{\"transcript\":\"\",\"newItems\":[{\"what\":\"\",\"owner\":\"\",\"due\":\"\",\"quote\":\"\"}],\"found\":[{\"kind\":\"replied 或 done 或 note\",\"item\":\"已有事项的 id，note 时写 null\",\"date\":\"YYYY-MM-DD\",\"text\":\"\",\"quote\":\"\"}]}\n\n【例子】\n输入：\n今天：2026-11-12。学生：张同学；家长称呼：张妈妈。\n已有事项（id｜事项｜负责人｜截止）：\n17｜付 UC 申请费｜家长｜2026-11-19\n材料：\n<<<\n顾问：张妈妈，UC 申请费记得 19 号前付\n张妈妈：好的，明天就付。对了托福送分是不是也要弄？\n顾问：对，送分要 30 美元，您 22 号前付一下\n张妈妈：行，辛苦老师\n>>>\n输出：\n{\"transcript\":\"\",\"newItems\":[{\"what\":\"付托福送分费\",\"owner\":\"家长\",\"due\":\"2026-11-22\",\"quote\":\"送分要 30 美元，您 22 号前付一下\"}],\"found\":[{\"kind\":\"replied\",\"item\":\"17\",\"date\":\"2026-11-12\",\"text\":\"好的，明天就付\",\"quote\":\"好的，明天就付\"},{\"kind\":\"note\",\"item\":null,\"date\":\"2026-11-12\",\"text\":\"行，辛苦老师\",\"quote\":\"行，辛苦老师\"}]}";
+const USER_PROMPT = "今天：{today}。学生：{student}；家长称呼：{parent}。\n已有事项（id｜事项｜负责人｜截止）：\n{items}\n材料{imgnote}：\n<<<\n{text}\n>>>";
 function aiCheck(out, text, open){       // 原话必须在原文里；负责人、日期、事项 id 必须合法
   const norm = s => String(s || "").replace(/\s+/g, ""), src = norm(text), ids = new Set(open.map(i => i.id));
   const okDate = s => { try { return /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s; } catch(e){ return false; } };
@@ -219,9 +199,9 @@ function aiCheck(out, text, open){       // 原话必须在原文里；负责人
   for (const x of out.newItems || []){ const q = String(x.quote || "");
     if (!q || !src.includes(norm(q)) || !OWNERS.includes(x.owner) || !String(x.what || "").trim()){ res.dropped++; continue; }
     res.newItems.push({what: String(x.what).trim().slice(0, 120), owner: x.owner, due: okDate(x.due) ? x.due : "", quote: q.slice(0, 300)}); }
-  for (const x of out.found || []){ const q = String(x.quote || "");
-    if (!["replied", "done"].includes(x.kind) || !ids.has(String(x.item)) || !q || !src.includes(norm(q))){ res.dropped++; continue; }
-    res.found.push({kind: x.kind, item: String(x.item), date: okDate(x.date) ? x.date : "", text: String(x.text || "").slice(0, 300), quote: q.slice(0, 300)}); }
+  for (const x of out.found || []){ const q = String(x.quote || ""), note = x.kind === "note";
+    if (!["replied", "done", "note"].includes(x.kind) || (!note && !ids.has(String(x.item))) || !q || !src.includes(norm(q))){ res.dropped++; continue; }
+    res.found.push({kind: x.kind, item: note ? null : String(x.item), date: okDate(x.date) ? x.date : "", text: String(x.text || q).slice(0, 300), quote: q.slice(0, 300)}); }
   return res;
 }
 

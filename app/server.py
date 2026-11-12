@@ -268,6 +268,10 @@ def a_additems(c, b):
 def a_found(c, b):
     s = c.student(b.get("student"))
     for f in (b.get("found") or [])[:20]:
+        if f.get("kind") == "note":                            # 家长的回复对不上具体事项，只留痕
+            t = txt(f.get("text") or f.get("quote"), "家长原话", 300)
+            c.log(s["id"], "微信回复", f"家长回复：“{t}”（从粘贴的内容识别，{c.u['name']}确认，不对应具体事项）", who=s["parent"], undo={"t": "none"})
+            continue
         it = c.item(f.get("item"))
         if it["student_id"] != s["id"]:
             bad("事项不属于这个学生")
@@ -446,7 +450,7 @@ async def extract(request: Request, u=Depends(current_user)):
     if images and not ai.images_enabled():
         bad("还没有开通图片识别，请把文字贴进来")
     try:
-        return ai.extract(text, s["name"], s["parent"], open_items, db.today(), images, reply=b.get("mode") == "reply")
+        return ai.extract(text, s["name"], s["parent"], open_items, db.today(), images)
     except ai.AIError as e:
         bad(str(e), 502)
 
