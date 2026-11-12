@@ -2,7 +2,7 @@
    和服务器版的 server.py 做同样的事：每个操作检查输入、改数据、写一条留痕。
    数据存在这个网页自带的数据库里（claude.use("db")），用 Claude 账号识别是谁。
    集合：members（成员和角色）、students、items、logs、memory（本机构自填的学校）、app/settings。 */
-let DB = null, USER = null, UID = null, IS_OWNER = false, SAMPLE = null, DICT = null;
+let DB = null, USER = null, UID = null, IS_OWNER = false, SAMPLE = null, DICT = null, SAMPLE_IMG = false;
 const RAW = {members:new Map(), students:new Map(), items:new Map(), logs:new Map(), memory:new Map(), settings:null};
 let READY = {members:false, students:false, items:false, logs:false, memory:false};
 const OWNERS = ["学生", "家长", "学校", "机构"];
@@ -28,7 +28,7 @@ function buildState(){
   const consOf = new Map(studs.map(([id, s]) => [id, memberName(s.consultant)]));
   const undoAfter = Date.now() - 30 * 60e3;
   return {
-    me: {id: UID, name: me.name, role: me.role}, agency: (RAW.settings && RAW.settings.agency) || "我的机构", today: todayCN(), ai: !!SAMPLE,
+    me: {id: UID, name: me.name, role: me.role}, agency: (RAW.settings && RAW.settings.agency) || "我的机构", today: todayCN(), ai: !!SAMPLE, aiImages: !!SAMPLE && SAMPLE_IMG,
     users: [...RAW.members.entries()].map(([id, m]) => ({id, name: m.name, role: m.role, active: m.active !== false})),
     students: studs.map(([id, s]) => ({id, name: s.name, parent: s.parent, consultant: consOf.get(id), consultant_id: s.consultant})),
     items: [...RAW.items.entries()].filter(([, i]) => !i.deleted && sname.has(i.student_id))
@@ -171,16 +171,23 @@ async function api(name, payload = {}, label){
   S.undo = label && lid ? {log: lid, label} : null;
   render();
 }
-async function extract(sid, text){
+async function extract(sid, text, images = []){
   const s = student(sid);
   const open = [...RAW.items.entries()].filter(([, i]) => i.student_id === s.id && !i.deleted && !i.done).map(([id, i]) => ({id, what: i.what, owner: i.owner, due: i.due}));
   const prompt = AI_PROMPT.replace("{today}", todayCN()).replace("{student}", s.name).replace("{parent}", s.parent)
-    .replace("{items}", open.map(i => `${i.id}｜${i.what}｜${i.owner}｜${i.due}`).join("\n") || "（没有）").replace("{text}", text);
+    .replace("{items}", open.map(i => `${i.id}｜${i.what}｜${i.owner}｜${i.due}`).join("\n") || "（没有）").replace("{imgnote}", images.length ? IMG_NOTE.replace("{n}", images.length) : "").replace("{text}", () => text.trim() || "（没有文字，只有图片）");
   let out;
-  try { out = await SAMPLE.json(prompt); }
+  try { out = await SAMPLE.json(prompt, images.length ? {images} : undefined); }
   catch (e){ toast(e && e.code === "rate_limited" ? "AI 有点忙，请稍后再试" : e && e.code === "not_granted" ? "没有允许使用 AI，可以用手动添加" : "AI 整理失败，请再试一次或手动添加"); throw e; }
-  return aiCheck(out || {}, text, open);
+  out = out || {};
+  const transcript = images.length ? String(out.transcript || "").slice(0, 4000) : "";
+  return {...aiCheck(out, text + "\n" + transcript, open), transcript};      // 图片里的原话要在转写文字里，转写给顾问对照图片核对
 }
+const IMG_NOTE = `
+另附 {n} 张图片（可能是微信聊天截图、学校或考试机构的邮件截图、手写笔记照片）。
+先把图片里和申请事项有关的文字逐字转写进 transcript：照抄，不翻译、不改写；看不清的地方写[看不清]；文书、作文、推荐信正文不要转写。
+quote 可以从下面的原文或 transcript 里一字不差地复制。
+`;
 const AI_PROMPT = `你是留学申请机构的助理，只做一件事：从顾问给的文字里找出"谁要在哪天前做什么"，以及已有事项的进展。
 今天是 {today}。学生：{student}；家长称呼：{parent}。
 
@@ -193,8 +200,8 @@ const AI_PROMPT = `你是留学申请机构的助理，只做一件事：从顾�
 3. 每一条都要附原文里的原话（quote），必须一字不差地从原文复制，不要改写、不要合并多句。
 4. 如果原文显示上面某个已有事项"家长已回复确认"或"已经完成"，放进 found，item 写对应的 id。不要把已有事项再当成新事项。
 5. 不写、不改、不翻译任何文书、活动描述、推荐信的内容。
-6. 只输出 JSON，格式：
-{"newItems":[{"what":"...","owner":"家长","due":"2026-11-22","quote":"..."}],
+{imgnote}6. 只输出 JSON，格式：
+{"transcript":"图片转写，没有图片就填空字符串","newItems":[{"what":"...","owner":"家长","due":"2026-11-22","quote":"..."}],
  "found":[{"kind":"replied 或 done","item":"事项 id","date":"YYYY-MM-DD","text":"家长原话","quote":"..."}]}
 
 原文：
@@ -221,7 +228,9 @@ async function boot(){
   if (!DB || !USER){ main.innerHTML = `<div class="card"><div class="empty">请在 Claude 里登录后打开这个页面。</div></div>`; return; }
   UID = await USER.id(); IS_OWNER = !!(USER.isOwner && USER.isOwner());
   if (!UID){ main.innerHTML = `<div class="card"><div class="empty">请在 Claude 里登录后打开这个页面。</div></div>`; return; }
-  claude.use("sample").then(s => { SAMPLE = s; if (D){ D.ai = !!s; scheduleRender(); } });
+  claude.use("sample").then(async s => { SAMPLE = s;
+    try { SAMPLE_IMG = !!(s && s.limits && (await s.limits()).images); } catch (e){ SAMPLE_IMG = false; }
+    if (D){ D.ai = !!s; D.aiImages = !!s && SAMPLE_IMG; scheduleRender(); } });
   claude.use("dictation").then(d => { DICT = d; if (D) scheduleRender(); });
   const slow = setTimeout(() => { if (!S) main.innerHTML = `<div class="card"><div class="empty">数据还没连上，请稍等或刷新。</div></div>`; }, 10000);
   const sub = (name, col) => DB.collection(col).onSnapshot(snap => {

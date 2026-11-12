@@ -14,6 +14,7 @@
 - **任何事项的截止日都能改**：在学生页点一行，改日期并写原因。也能在那里标完成、记家长已回复、删除。
 - **撤销**：30 分钟内自己的操作可以撤销。留痕不会删，只标「已撤销」，老板看得到。
 - **录入**：手动添加；配置了 AI 密钥后可以贴笔记或微信聊天让 AI 整理。AI 给的每一条都必须带原文里的原话，程序核对原话确实在原文里，对不上的丢掉；顾问确认后才写入。原文不保存。
+- **图片识别**：录入页可以加最多 4 张图片（微信截图、学校邮件截图、笔记照片），也能直接粘贴截图。AI 先把图里的字转写出来，再整理成事项；原话核对的是这份转写，所以页面会把转写给顾问对照图片看。图片不保存。
 - **导出**：老板可以在「留痕」页导出全部事项和留痕（CSV，Excel 能打开）。
 
 ## 只存最少的信息
@@ -71,4 +72,16 @@ sudo crontab -u app -e
 
 - 域名和服务器由谁的名义购买、谁付费。
 - 要不要开 AI 整理：需要一个 DeepSeek（或通义千问）账号和 API 密钥，按用量付费，一周试用通常几块钱。
+
+## 接入 AI（服务器版）
+
+在 `/srv/app.env` 里填，改完 `sudo systemctl restart app`：
+
+| 功能 | 填什么 | 去哪里拿 |
+|---|---|---|
+| 文字整理 | `AI_API_KEY=sk-...`（默认用 DeepSeek，模型 deepseek-chat） | platform.deepseek.com 注册、充值、建 API key |
+| 图片识别 | `AI_VISION_MODEL=qwen-vl-max`，`AI_VISION_API_KEY=sk-...` | 阿里云百炼（通义千问）开通、建 API key。DeepSeek 不能看图 |
+
+只想用一家：把 `AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`、`AI_MODEL=qwen-plus`、`AI_API_KEY` 都填通义千问的，图片再填 `AI_VISION_MODEL=qwen-vl-max` 就行（`AI_VISION_API_KEY` 不填会用 `AI_API_KEY`）。
+密钥只放在服务器的 `/srv/app.env`，不要发到群里或提交到 GitHub。
 - 给机构的数据说明：我们存什么、不存什么、试用结束后怎么删除（`manage.py` 之外，直接删 `/srv/data/app.db` 和备份）。

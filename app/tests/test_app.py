@@ -151,3 +151,39 @@ def test_pages_served(setup):
     assert "申请进度助手" in a.get("/").text
     assert a.get("/deadlines.js").status_code == 200
     assert "window.CFG" in a.get("/config.js").text
+
+
+PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+
+def test_image_extract(setup, monkeypatch):
+    a, wang, sid = setup
+    st = wang.get("/api/state").json()
+    assert st["aiImages"] is False
+    r = wang.post("/api/extract", json={"student": sid, "text": "", "images": [PNG]}, headers=H)
+    assert r.status_code == 400                                           # 没配 AI 不能识别
+    monkeypatch.setenv("AI_API_KEY", "k")
+    r = wang.post("/api/extract", json={"student": sid, "text": "", "images": [PNG]}, headers=H)
+    assert r.status_code == 400 and "图片识别" in r.json()["detail"]       # 只配了 DeepSeek，没配看图模型
+    monkeypatch.setenv("AI_VISION_MODEL", "qwen-vl-max")
+    assert wang.get("/api/state").json()["aiImages"] is True
+    assert wang.post("/api/extract", json={"student": sid, "images": ["data:text/html;base64,AAAA"]}, headers=H).status_code == 400
+    assert wang.post("/api/extract", json={"student": sid, "images": [PNG] * 5}, headers=H).status_code == 400
+
+    sent = {}
+    class R:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"choices": [{"message": {"content": '```json\n{"transcript": "张妈妈：雅思送分费我 20 号前交", '
+                    '"newItems": [{"what": "付雅思送分费", "owner": "家长", "due": "2026-11-20", "quote": "雅思送分费我 20 号前交"},'
+                    '{"what": "编的", "owner": "家长", "due": "2026-11-21", "quote": "图里没有这句"}], "found": []}\n```'}}]}
+    def post(url, json, timeout, headers):
+        sent.update(url=url, body=json); return R()
+    monkeypatch.setattr(ai.httpx, "post", post)
+    r = wang.post("/api/extract", json={"student": sid, "text": "", "images": [PNG]}, headers=H)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert [x["what"] for x in out["newItems"]] == ["付雅思送分费"] and out["dropped"] == 1
+    assert "雅思送分费" in out["transcript"]
+    assert sent["url"].startswith("https://dashscope.aliyuncs.com") and sent["body"]["model"] == "qwen-vl-max"
+    assert sent["body"]["messages"][0]["content"][1]["image_url"]["url"] == PNG

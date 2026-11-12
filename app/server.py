@@ -159,7 +159,7 @@ def state(u):
     cons_of = {s["id"]: uname.get(s["consultant_id"], "") for s in studs}
     undo_after = (db.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M")
     return {
-        "me": {"id": u["id"], "name": u["name"], "role": u["role"]}, "agency": u["agency"], "today": today, "ai": ai.enabled(),
+        "me": {"id": u["id"], "name": u["name"], "role": u["role"]}, "agency": u["agency"], "today": today, "ai": ai.enabled(), "aiImages": ai.enabled() and ai.images_enabled(),
         "users": [{k: x[k] for k in ("id", "name", "role", "active")} | ({"login": x["login"]} if u["role"] == "owner" else {}) for x in users],
         "students": [{"id": s["id"], "name": s["name"], "parent": s["parent"], "consultant": cons_of[s["id"]], "consultant_id": s["consultant_id"]} for s in studs],
         "items": [{"id": i["id"], "student": sname[i["student_id"]], "what": i["what"], "owner": i["owner"], "due": i["due"], "created": i["created"],
@@ -421,14 +421,22 @@ async def act(request: Request, u=Depends(current_user)):
 @app.post("/api/extract")
 async def extract(request: Request, u=Depends(current_user)):
     b = await request.json()
-    text = txt(b.get("text"), "内容", 6000)
+    images = b.get("images") or []
+    if not isinstance(images, list) or len(images) > 4:
+        bad("一次最多 4 张图片")
+    for im in images:
+        if not isinstance(im, str) or not re.match(r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$", im) or len(im) > 4_000_000:
+            bad("图片格式不对，请换一张（jpg、png）")
+    text = txt(b.get("text"), "内容", 6000, required=not images)
     with db.connect() as con:
         s = Ctx(con, u).student(b.get("student"))
         open_items = [dict(r) for r in con.execute("SELECT id, what, owner, due FROM item WHERE student_id = ? AND deleted = 0 AND done IS NULL", (s["id"],))]
     if not ai.enabled():
         bad("还没有配置 AI 服务，请用手动添加")
+    if images and not ai.images_enabled():
+        bad("还没有开通图片识别，请把文字贴进来")
     try:
-        return ai.extract(text, s["name"], s["parent"], open_items, db.today())
+        return ai.extract(text, s["name"], s["parent"], open_items, db.today(), images)
     except ai.AIError as e:
         bad(str(e), 502)
 
