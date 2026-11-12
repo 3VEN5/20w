@@ -55,7 +55,7 @@ python crawler.py
 
 1. **GitHub Actions（推荐）**：仓库根目录的 `.github/workflows/crawl.yml` 会在每周一北京时间早上 8 点自动跑，有变化就提交。有需要人工核实的变化时，这次运行会显示失败，GitHub 会发邮件。
 2. **自己的电脑或服务器**：Mac / Linux 用 `crontab -e` 加一行
-   `0 8 * * 1 cd /路径/deadline-crawler && python3 crawler.py`
+   `0 8 * * 1 cd /路径/爬虫 && python3 crawler.py`
 
 每周一次就够了。Common App 总表一个申请季只改几次，抓得太勤没有意义，也不礼貌。
 

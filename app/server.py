@@ -15,7 +15,7 @@ import ai, db
 
 HERE = Path(__file__).parent
 STATIC = HERE / "static"
-DEADLINES_JS = Path(os.environ.get("DEADLINES_JS", HERE.parent / "deadline-crawler" / "data" / "deadlines_web.js"))
+DEADLINES_JS = Path(os.environ.get("DEADLINES_JS", HERE.parent / "爬虫" / "data" / "deadlines_web.js"))
 SECURE_COOKIE = os.environ.get("SECURE_COOKIE", "1") == "1"   # 本地调试用 http 时设成 0
 SESSION_DAYS = 30
 OWNERS = {"学生", "家长", "学校", "机构"}
