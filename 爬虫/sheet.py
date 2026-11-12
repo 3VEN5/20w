@@ -77,6 +77,10 @@ def export():
     steps, chase, soon = read_config()
     sheet(wb.create_sheet("机构内部时间"), ["事项", "负责人", "提前天数"], steps, [36, 10, 12])
     sheet(wb.create_sheet("提醒规则"), ["项目", "数值"], [["提醒家长（截止前第几天）", chase], ["临期（几天内到期）", soon]], [30, 16])
+    wb.move_sheet("填写说明", offset=3)                  # 数据放第一页，打开就能看到；说明放最后
+    wb.active = 0
+    for w in wb:
+        w.sheet_view.tabSelected = w.title == "学校截止日"
     wb.save(XLSX)
     print(f"已生成 {XLSX.name}：{len(rows)} 条截止日，{len(steps)} 条内部时间")
 
