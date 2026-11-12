@@ -52,7 +52,7 @@ def date(v, name="日期"):
 
 
 def md(d):
-    return d[5:]
+    return f"{int(d[5:7])}月{int(d[8:10])}日"
 
 
 # ------------------------------------------------------------------ 登录
@@ -324,6 +324,37 @@ def a_editdue(c, b):
     c.log(it["student_id"], "改截止日", f"「{it['what']}」截止日从 {it['due']} 改为 {new}" + (f"（{reason}）" if reason else ""), undo={"t": "due", "id": it["id"], "old": it["due"]})
 
 
+def a_edititem(c, b):
+    it = c.item(b.get("item"))
+    what, owner, due = txt(b.get("what"), "事项", 120), b.get("owner"), date(b.get("due"), "截止日")
+    if owner not in OWNERS:
+        bad("负责人只能是学生、家长、学校或机构")
+    ch = []
+    if what != it["what"]:
+        ch.append(f"名称改为「{what}」")
+    if owner != it["owner"]:
+        ch.append(f"负责人从{it['owner']}改为{owner}")
+    if due != it["due"]:
+        ch.append(f"截止日从 {it['due']} 改为 {due}")
+    if not ch:
+        bad("没有改动")
+    reason = txt(b.get("reason"), "改动原因", 200, required=False)
+    c.con.execute("UPDATE item SET what = ?, owner = ?, due = ? WHERE id = ?", (what, owner, due, it["id"]))
+    c.log(it["student_id"], "修改事项", f"「{it['what']}」{'，'.join(ch)}" + (f"（{reason}）" if reason else ""),
+          undo={"t": "edit", "id": it["id"], "old": {"what": it["what"], "owner": it["owner"], "due": it["due"]}})
+
+
+def a_removeschool(c, b):
+    s = c.student(b.get("student"))
+    school = txt(b.get("school"), "学校", 100)
+    reason = txt(b.get("reason"), "移除原因", 200, required=False)
+    ids = [r["id"] for r in c.con.execute("SELECT id FROM item WHERE student_id = ? AND agency_id = ? AND school = ? AND deleted = 0", (s["id"], c.aid, school))]
+    if not ids:
+        bad("这个学生没有这所学校的事项")
+    c.con.executemany("UPDATE item SET deleted = 1 WHERE id = ?", [(i,) for i in ids])
+    c.log(s["id"], "移除学校", f"移除 {school}，连同 {len(ids)} 条事项" + (f"，原因：{reason}" if reason else ""), undo={"t": "restore", "ids": ids})
+
+
 def a_deleteitem(c, b):
     it = c.item(b.get("item"))
     reason = txt(b.get("reason"), "删除原因", 200, required=False)
@@ -353,6 +384,11 @@ def a_undo(c, b):
         c.con.execute("UPDATE item SET due = ? WHERE id = ? AND agency_id = ?", (u["old"], u["id"], c.aid))
     elif t == "undelete":
         c.con.execute("UPDATE item SET deleted = 0 WHERE id = ? AND agency_id = ?", (u["id"], c.aid))
+    elif t == "edit":
+        o = u["old"]
+        c.con.execute("UPDATE item SET what = ?, owner = ?, due = ? WHERE id = ? AND agency_id = ?", (o["what"], o["owner"], o["due"], u["id"], c.aid))
+    elif t == "restore":
+        c.con.executemany("UPDATE item SET deleted = 0 WHERE id = ? AND agency_id = ?", [(i, c.aid) for i in u["ids"]])
     # 留痕不删，只标成"已撤销"，老板仍然看得到
     c.con.execute("UPDATE log SET undone = 1 WHERE id = ?", (l["id"],))
 

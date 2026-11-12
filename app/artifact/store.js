@@ -16,7 +16,7 @@ const bad = m => { throw new Bad(m); };
 function txt(v, name, max = 200, required = true){ v = String(v ?? "").trim(); if (required && !v) bad(`${name}不能为空`); if (v.length > max) bad(`${name}太长了（最多 ${max} 字）`); return v; }
 function date(v, name = "日期"){ v = String(v ?? "").trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) bad(`${name}格式不对`);
   const d = new Date(v + "T00:00:00Z"); if (isNaN(d) || d.toISOString().slice(0, 10) !== v) bad(`${name}不存在`); return v; }
-const mdd = s => s.slice(5);
+const mdd = s => `${+s.slice(5, 7)}月${+s.slice(8, 10)}日`;
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 /* ---------- 把原始数据拼成页面要的样子（和服务器版 state() 一样） ---------- */
@@ -121,6 +121,21 @@ const ACT = {
     const reason = txt(b.reason, "改动原因", 200, false);
     await W.upd("items", it.id, {due: nd});
     return log(it.student_id, "改截止日", `「${it.what}」截止日从 ${it.due} 改为 ${nd}` + (reason ? `（${reason}）` : ""), null, {t:"due", id: it.id, old: it.due}); },
+  async edititem(b){ const it = item(b.item), what = txt(b.what, "事项", 120), owner = b.owner, due = date(b.due, "截止日");
+    if (!OWNERS.includes(owner)) bad("负责人只能是学生、家长、学校或机构");
+    const ch = [], upd = {};
+    if (what !== it.what){ ch.push(`名称改为「${what}」`); upd.what = what; }
+    if (owner !== it.owner){ ch.push(`负责人从${it.owner}改为${owner}`); upd.owner = owner; }
+    if (due !== it.due){ ch.push(`截止日从 ${it.due} 改为 ${due}`); upd.due = due; }
+    if (!ch.length) bad("没有改动");
+    const reason = txt(b.reason, "改动原因", 200, false);
+    await W.upd("items", it.id, upd);
+    return log(it.student_id, "修改事项", `「${it.what}」${ch.join("，")}` + (reason ? `（${reason}）` : ""), null, {t:"edit", id: it.id, old: {what: it.what, owner: it.owner, due: it.due}}); },
+  async removeschool(b){ const s = student(b.student), school = txt(b.school, "学校", 100), reason = txt(b.reason, "移除原因", 200, false);
+    const ids = [...RAW.items].filter(([, it]) => it.student_id === s.id && it.school === school && !it.deleted).map(([id]) => id);
+    if (!ids.length) bad("这个学生没有这所学校的事项");
+    for (const id of ids) await W.upd("items", id, {deleted: true});
+    return log(s.id, "移除学校", `移除 ${school}，连同 ${ids.length} 条事项` + (reason ? `，原因：${reason}` : ""), null, {t:"restore", ids}); },
   async deleteitem(b){ const it = item(b.item), reason = txt(b.reason, "删除原因", 200, false);
     await W.upd("items", it.id, {deleted: true});
     return log(it.student_id, "删除事项", `删除「${it.what}」（原截止 ${it.due}）` + (reason ? `，原因：${reason}` : ""), null, {t:"undelete", id: it.id}); },
@@ -135,6 +150,8 @@ const ACT = {
     else if (u.t === "items") for (const id of u.ids) await W.upd("items", id, {deleted: true});
     else if (u.t === "due") await W.upd("items", u.id, {due: u.old});
     else if (u.t === "undelete") await W.upd("items", u.id, {deleted: false});
+    else if (u.t === "edit") await W.upd("items", u.id, u.old);
+    else if (u.t === "restore") for (const id of u.ids) await W.upd("items", id, {deleted: false});
     await W.upd("logs", String(b.log), {undone: true});        // 留痕不删，只标"已撤销"
     return null; },
   async addstudent(b){ const name = txt(b.name, "学生称呼", 30), parent = txt(b.parent, "家长称呼", 30);
@@ -143,6 +160,7 @@ const ACT = {
     if ([...RAW.students.values()].some(s => s.name === name)) bad("已经有同名学生了，可以加个区分，比如“张同学 A”");
     const id = newId();
     await W.set("students", id, {name, parent, consultant: cid, archived: false, created: todayCN(), n: Date.now()});
+    for (let i = 0; i < 50 && !RAW.students.has(id); i++) await new Promise(r => setTimeout(r, 60));   // 等新学生同步回来，紧接着的加学校才找得到
     return log(id, "学生", `新建学生 ${name}，家长称呼 ${parent}，负责顾问 ${memberName(cid)}`); },
   async archivestudent(b){ const s = student(b.student); await W.upd("students", s.id, {archived: true});
     return log(s.id, "学生", `${s.name} 已结案（不再显示，记录保留）`); },

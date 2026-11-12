@@ -207,3 +207,27 @@ def test_school_region_and_parent_note(setup):
     assert st["logs"][0]["src"] == "微信回复" and st["logs"][0]["who"] == "张妈妈" and "存款证明" in st["logs"][0]["act"]
     assert wang.post("/api/act", json={"op": "parentnote", "student": sid, "text": ""}, headers=H).status_code == 400
 
+
+
+def test_edititem_and_removeschool(setup):
+    a, wang, sid = setup
+    st = act(wang, "addschool", student=sid, school="Test College", round="RD", deadline="2027-01-15", region="美国",
+             steps=[{"what": "付 Test College 申请费", "owner": "家长", "due": "2027-01-10"},
+                    {"what": "递交 Test College 申请（RD）", "owner": "机构", "due": "2027-01-12"}])
+    its = [i for i in st["items"] if i.get("school") == "Test College"]
+    assert len(its) == 2
+    iid = next(i["id"] for i in its if i["owner"] == "家长")
+    st = act(wang, "edititem", item=iid, what="付 Test College 申请费 80 美元", owner="学生", due="2027-01-08", reason="学生自己有卡")
+    it = next(i for i in st["items"] if i["id"] == iid)
+    assert (it["what"], it["owner"], it["due"]) == ("付 Test College 申请费 80 美元", "学生", "2027-01-08")
+    assert "负责人从家长改为学生" in st["logs"][0]["act"] and "学生自己有卡" in st["logs"][0]["act"]
+    st = act(wang, "undo", log=st["logs"][0]["id"])
+    it = next(i for i in st["items"] if i["id"] == iid)
+    assert (it["what"], it["owner"], it["due"]) == ("付 Test College 申请费", "家长", "2027-01-10")
+    r = wang.post("/api/act", json={"op": "edititem", "item": iid, "what": it["what"], "owner": "家长", "due": it["due"]}, headers=H)
+    assert r.status_code == 400                                          # 没有改动不记录
+    st = act(wang, "removeschool", student=sid, school="Test College", reason="学生决定不申请")
+    assert not [i for i in st["items"] if i.get("school") == "Test College"]
+    assert "移除 Test College，连同 2 条事项" in st["logs"][0]["act"]
+    st = act(wang, "undo", log=st["logs"][0]["id"])
+    assert len([i for i in st["items"] if i.get("school") == "Test College"]) == 2
