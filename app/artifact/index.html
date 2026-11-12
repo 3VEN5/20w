@@ -195,7 +195,7 @@ const vary = (key, arr) => { arr = Array.isArray(arr) ? arr : [arr]; return arr[
 const varyBtn = key => `<button class="btn ghost" data-act="vary" data-key="${esc(key)}">换一种说法</button>`;
 // 发给家长的文字：日期写成 11月14号，中文和英文数字之间不留空格。
 const mdCN = s => s ? `${+s.slice(5, 7)}月${+s.slice(8, 10)}号` : "";
-const tight = s => s.replace(/([\u4e00-\u9fff，。：；])[ \t]+(?=[A-Za-z0-9])/g, "$1").replace(/([A-Za-z0-9])[ \t]+(?=[\u4e00-\u9fff])/g, "$1");
+const tight = s => s.replace(/([\u4e00-\u9fff，。：；])[ \t]+(?=[A-Za-z0-9\u4e00-\u9fff])/g, "$1").replace(/([A-Za-z0-9])[ \t]+(?=[\u4e00-\u9fff])/g, "$1");
 const fill = (t, it) => { const s = stu(it.student); return tight(t.replaceAll("{家长}", s.parent).replaceAll("{学生}", short(it.student)).replaceAll("{事项}", it.what).replaceAll("{截止}", mdCN(it.due))); };
 const chaseKey = it => "c" + it.id + "-" + it.chases.length;
 const chaseMsg = it => fill(vary(chaseKey(it), CF.templates.chase[chaseDue(it)]), it);
