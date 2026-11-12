@@ -214,7 +214,7 @@ def a_chased(c, b):
     cid = c.con.execute("INSERT INTO chase (item_id, date) VALUES (?,?)", (it["id"], c.today)).lastrowid
     n = c.con.execute("SELECT COUNT(*) FROM chase WHERE item_id = ?", (it["id"],)).fetchone()[0]
     school = it["owner"] == "学校"
-    c.log(it["student_id"], "跟进" if school else "催办", f"{'跟进学校' if school else '已发催办'}（第 {n} 次）：{it['what']}", undo={"t": "chase", "id": cid})
+    c.log(it["student_id"], "跟进" if school else "提醒", f"{'跟进学校' if school else '已发提醒'}（第 {n} 次）：{it['what']}", undo={"t": "chase", "id": cid})
 
 
 def a_done(c, b):
@@ -376,23 +376,6 @@ def a_archivestudent(c, b):
     c.log(s["id"], "学生", f"{s['name']} 已结案（不再显示，记录保留）")
 
 
-def a_importdates(c, b):
-    """老板把顾问核对过的日期表粘贴回来：改日期、加学校。date 为空 = 滚动录取。"""
-    if c.u["role"] != "owner":
-        bad("只有老板能导入日期", 403)
-    rows = (b.get("rows") or [])[:500] or bad("没有要导入的内容")
-    schools, parts = set(), []
-    for r in rows:
-        school, rnd = txt(r.get("school"), "学校", 100), txt(r.get("round"), "轮次", 40)
-        d = date(r.get("date"), "截止日") if r.get("date") else ""
-        c.con.execute("INSERT OR REPLACE INTO custom_school (agency_id, school, round, date, by, on_date, src, region) VALUES (?,?,?,?,?,?,?,?)",
-                      (c.aid, school, rnd, d, c.u["name"], c.today, txt(r.get("src"), "来源", 200, required=False) or "核对表导入",
-                       txt(r.get("region"), "地区", 20, required=False)))
-        schools.add(school)
-        parts.append(f"{school} {rnd} {d or '滚动录取'}")
-    c.log(None, "日期库", f"{c.u['name']}从核对表导入 {len(rows)} 条日期，涉及 {len(schools)} 所学校：" + "；".join(parts[:30]) + (" 等" if len(parts) > 30 else ""))
-
-
 def a_forget(c, b):
     school = txt(b.get("school"), "学校", 100)
     c.con.execute("DELETE FROM custom_school WHERE agency_id = ? AND school = ?", (c.aid, school))
@@ -485,7 +468,7 @@ def export(kind: str = "items", u=Depends(current_user)):
         for l in reversed(st["logs"]):
             w.writerow([l["date"], l["time"], l["student"], l["who"], l["src"], l["act"], "是" if l["undone"] else ""])
     else:
-        w.writerow(["学生", "事项", "负责", "截止", "录入", "约定", "家长回复", "催办次数", "完成", "学校"])
+        w.writerow(["学生", "事项", "负责", "截止", "录入", "约定", "家长回复", "提醒次数", "完成", "学校"])
         for i in st["items"]:
             w.writerow([i["student"], i["what"], i["owner"], i["due"], i["created"], i["agreed"] or "", i["replied"] or "", len(i["chases"]), i["done"] or "", i["school"] or ""])
     data = "﻿" + buf.getvalue()
