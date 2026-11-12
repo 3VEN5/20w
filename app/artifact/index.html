@@ -9,7 +9,7 @@
 :root{
   --bg:#F3F5F4; --surface:#fff; --sunk:#EAEFEE; --ink:#16282A; --muted:#5B6C6D; --line:#D7E0DF;
   --accent:#2F5D62; --accent-ink:#fff; --accent-soft:#DFEBEB;
-  --red:#B4372A; --red-bg:#FBE8E5; --amber:#93600F; --amber-bg:#FCF1DC; --green:#2C7448; --green-bg:#E3F2E8;
+  --red:#B4372A; --red-bg:#FBE8E5; --amber:#7A5A00; --amber-bg:#FFE97A; --green:#2C7448; --green-bg:#E3F2E8;
   --shadow:0 1px 2px rgba(22,40,42,.06),0 6px 18px rgba(22,40,42,.07);
   --f:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
   --fd:"Noto Serif SC","Songti SC",serif;
@@ -36,14 +36,14 @@ h2{font-size:16px;margin:22px 0 10px;display:flex;align-items:center;gap:8px}
 h2:first-child{margin-top:0}
 h2 .cnt{font-size:12px;font-weight:500;background:var(--sunk);color:var(--muted);border-radius:999px;padding:0 8px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:14px;margin-bottom:10px}
-.card.red{border-left:4px solid var(--red)} .card.yellow{border-left:4px solid #D99A2B}
+.card.red{border-left:4px solid var(--red)} .card.yellow{border-left:4px solid #F2C200}
 .muted{color:var(--muted)} .small{font-size:13px}
 .head{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
 .head b{font-size:15px}
 .chip{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap}
 .chip.red{background:var(--red-bg);color:var(--red)} .chip.yellow{background:var(--amber-bg);color:var(--amber)} .chip.green{background:var(--green-bg);color:var(--green)} .chip.acc{background:var(--accent-soft);color:var(--accent)}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;flex:none}
-.dot.red{background:var(--red)} .dot.yellow{background:#D99A2B} .dot.green{background:var(--green)}
+.dot.red{background:var(--red)} .dot.yellow{background:#F2C200} .dot.green{background:var(--green)}
 textarea,input[type=text],input[type=date],select{display:block;width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface);line-height:1.6}
 textarea{resize:vertical}
 textarea.msg{background:#F6FBF3;min-height:128px}
@@ -109,6 +109,7 @@ label .muted{display:block}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.thumb{position:relative}.thumb img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line, #ddd)}.thumb .x{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:#333;color:#fff;cursor:pointer;line-height:22px;padding:0}.filebtn{cursor:pointer}
 .sch{border-top:1px solid var(--line)}.reg + .sch{border-top:0}.schrow{display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap;width:100%;text-align:left;border:0;background:none;padding:11px 4px;font:inherit;color:inherit;cursor:pointer}.schrow:hover{background:var(--sunk)}.schrow .nx{margin-left:auto}.reg{font-size:13px;color:var(--muted);font-weight:600;margin:14px 0 2px;padding-bottom:4px;border-bottom:1px solid var(--line)}.reg .cnt{margin-left:6px;font-weight:400}
 .fold > summary{cursor:pointer;font-weight:600}.fold[open] > summary{margin-bottom:10px}
+.steps3{margin:0 0 10px;padding-left:20px;color:var(--muted);font-size:14px}.steps3 li{margin:3px 0}
 </style>
 </head>
 <body>
@@ -129,7 +130,7 @@ label .muted{display:block}
 <script>
 /* ======================= 页面逻辑 =======================
    数据都在服务器上：页面启动时取一次，之后每个操作发给服务器，服务器写留痕后返回最新数据。
-   规则（紧急/临期/正常、该不该催、逾期责任判断）在这里算，和演示版一致。 */
+   规则（逾期/临期/待办、该不该催、逾期责任判断）在这里算，和演示版一致。 */
 const CF = window.CFG;
 let D = null, TODAY = "", S = null, SEEN = 0;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -151,12 +152,12 @@ function blankAdd(){ return {school:"", round:"", deadline:"", reason:"", src:""
 function blankRow(){ return {what:"", owner:"家长", due:""}; }
 function fresh(){
   return { role: D.me.role === "owner" ? "o" : "c", tab:{c:"overview", o:"board", s:"settings"}, pick:null, gen:null, undo:null, add:blankAdd(),
-           filter:"全部", lf:{consultant:"全部", student:"全部"}, open:null, viewAs:null, sub:"schools", openSchool:null, addOpen:false, v:{}, tf:"全部", fold:{},
+           filter:"全部", lf:{consultant:"全部", student:"全部"}, open:null, viewAs:null, sub:"schools", openSchool:null, addOpen:false, v:{}, tf:"全部", fold:{}, sheet:{text:"", prev:null},
            cap:{student:null, text:"", imgs:[], target:null, busy:false, res:null, off:{}, offF:{}, rows:[blankRow()]}, newStu:false };
 }
 
 /* ---------- 规则 ---------- */
-function light(it){ if (it.done) return "green"; const dd = diff(it.due, TODAY); return dd <= 3 ? "red" : dd <= 10 ? "yellow" : "green"; }
+function light(it){ if (it.done) return "green"; const dd = diff(it.due, TODAY); return dd < 0 ? "red" : dd <= CF.soonDays ? "yellow" : "green"; }   // 逾期 / 临期 / 待办
 const overdue = it => !it.done && diff(it.due, TODAY) < 0;
 function stages(it){ return CF.chaseDays.map(n => ({n, date:addDays(it.due, -n)})).filter(s => s.date > it.created); }
 function chaseDue(it){
@@ -193,13 +194,16 @@ const timeline = logs => logs.length ? `<ul class="tl">${logs.map(l => `<li clas
 const hash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const vary = (key, arr) => { arr = Array.isArray(arr) ? arr : [arr]; return arr[(hash(key) + (S.v[key] || 0)) % arr.length]; };
 const varyBtn = key => `<button class="btn ghost" data-act="vary" data-key="${esc(key)}">换一种说法</button>`;
-const fill = (t, it) => { const s = stu(it.student); return t.replaceAll("{家长}", s.parent).replaceAll("{学生}", short(it.student)).replaceAll("{事项}", it.what).replaceAll("{截止}", md(it.due)); };
+// 发给家长的文字：日期写成 11月14号，中文和英文数字之间不留空格。
+const mdCN = s => s ? `${+s.slice(5, 7)}月${+s.slice(8, 10)}号` : "";
+const tight = s => s.replace(/([\u4e00-\u9fff，。：；])[ \t]+(?=[A-Za-z0-9])/g, "$1").replace(/([A-Za-z0-9])[ \t]+(?=[\u4e00-\u9fff])/g, "$1");
+const fill = (t, it) => { const s = stu(it.student); return tight(t.replaceAll("{家长}", s.parent).replaceAll("{学生}", short(it.student)).replaceAll("{事项}", it.what).replaceAll("{截止}", mdCN(it.due))); };
 const chaseKey = it => "c" + it.id + "-" + it.chases.length;
 const chaseMsg = it => fill(vary(chaseKey(it), CF.templates.chase[chaseDue(it)]), it);
 function agreeMsg(name, its){
   const s = stu(name);
-  const list = its.map((it, i) => `${i+1}. ${it.owner === "家长" ? "您" : short(name)}在 ${md(it.due)} 前：${it.what}`).join("\n");
-  return vary("a" + name, CF.templates.agree).replaceAll("{家长}", s.parent).replaceAll("{学生}", short(name)).replace("{列表}", list);
+  const list = its.map((it, i) => `${i+1}. ${mdCN(it.due)}前，${it.owner === "家长" ? "您" : short(name)}${it.what}`).join("\n");
+  return tight(vary("a" + name, CF.templates.agree).replaceAll("{家长}", s.parent).replaceAll("{学生}", short(name)).replace("{列表}", list));
 }
 function parts(name){
   const its = D.items.filter(i => i.student === name);
@@ -209,20 +213,20 @@ function parts(name){
 function progressMsg(name){
   const s = stu(name), p = parts(name), sub = t => t.replaceAll("{家长}", s.parent).replaceAll("{学生}", short(name));
   const L = [sub(vary("p" + name, CF.templates.progressOpen))];
-  if (p.done.length) L.push("近一周完成：" + p.done.map(i => `${i.what}，${md(i.done)} 完成`).join("；") + "。");
+  if (p.done.length) L.push("近一周完成：" + p.done.map(i => `${i.what}，${mdCN(i.done)} 完成`).join("；") + "。");
   const nx = p.open.filter(i => i.owner !== "家长");
-  if (nx.length) L.push("接下来：" + nx.slice(0, 3).map(i => `${md(i.due)} 前${i.what}，${i.owner}负责`).join("；") + (nx.length > 3 ? `；后面还有 ${nx.length - 3} 件按计划推进` : "") + "。");
-  if (p.need.length) L.push("需要您做的：" + p.need.map(i => `${md(i.due)} 前${i.what}`).join("；") + "。");
+  if (nx.length) L.push("接下来：" + nx.slice(0, 3).map(i => `${mdCN(i.due)}前${i.what}，${i.owner}负责`).join("；") + (nx.length > 3 ? `；后面还有 ${nx.length - 3} 件按计划推进` : "") + "。");
+  if (p.need.length) L.push("需要您做的：" + p.need.map(i => `${mdCN(i.due)}前${i.what}`).join("；") + "。");
   else L.push("目前没有需要您处理的事。");
   L.push(sub(vary("p" + name, CF.templates.progressClose)));
-  return L.join("\n");
+  return tight(L.join("\n"));
 }
 function reportText(name){
   const p = parts(name), num = (a, f) => a.length ? a.map((i, k) => `${k + 1}. ${f(i)}`) : ["无"];
-  return [`${name} 申请进度周报，${md(addDays(TODAY,-6))} 至 ${md(TODAY)}`, "",
-    "需要您做：" + (p.need.length ? p.need.map(i => `${md(i.due)} 前${i.what}`).join("；") : "本周没有"), "",
-    "本周完成：", ...num(p.done, i => `${i.what}，${md(i.done)} 完成`), "",
-    "接下来：", ...num(p.open.slice(0, 6), i => `${md(i.due)} 前${i.what}，${i.owner}负责`), ...(p.open.length > 6 ? [`后面还有 ${p.open.length - 6} 件按计划推进`] : [])].join("\n");
+  return tight([`${name} 申请进度周报，${mdCN(addDays(TODAY,-6))}至${mdCN(TODAY)}`, "",
+    "需要您做：" + (p.need.length ? p.need.map(i => `${mdCN(i.due)}前${i.what}`).join("；") : "本周没有"), "",
+    "本周完成：", ...num(p.done, i => `${i.what}，${mdCN(i.done)} 完成`), "",
+    "接下来：", ...num(p.open.slice(0, 6), i => `${mdCN(i.due)}前${i.what}，${i.owner}负责`), ...(p.open.length > 6 ? [`后面还有 ${p.open.length - 6} 件按计划推进`] : [])].join("\n"));
 }
 
 /* ---------- 报名学校：按地区列出 ---------- */
@@ -246,15 +250,18 @@ DL.info = DL.info || {};
 const RNAME = {ED:"ED", EDII:"ED II", EA:"EA", EAII:"EA II", REA:"REA", RD:"RD"};
 const rn = r => RNAME[r] || r;
 const isRoll = d => d === "Rolling" || d === "";
-function lookup(school){
-  if (DL.schools[school]) return {rounds: DL.schools[school], kind: DL.info[school] ? "manual" : "commonapp"};
-  if (D.memory[school]) return {rounds: D.memory[school].d, kind: "mem"};
-  return null;
+function lookup(school){     // 日期库 + 本机构核对过或自己填的日期；同一所学校同一轮次，以本机构的为准
+  const base = DL.schools[school], mem = D.memory[school];
+  if (!base && !mem) return null;
+  const bk = base ? (DL.info[school] ? "manual" : "commonapp") : "mem", kinds = {};
+  for (const r in (base || {})) kinds[r] = bk;
+  for (const r in (mem ? mem.d : {})) kinds[r] = "mem";
+  return {rounds: {...(base || {}), ...(mem ? mem.d : {})}, kinds, kind: bk};
 }
 function srcText(school, round, kind){
   if (kind === "commonapp") return `${DL.source}（${DL.source_updated} 更新）`;
   if (kind === "manual") return `${DL.info[school].source}（${DL.info[school].verified_on} 核实）`;
-  if (kind === "mem"){ const m = D.memory[school]; return `本机构 ${m.by} ${md(m.on)} 自填${m.src ? "，" + m.src : ""}`; }
+  if (kind === "mem"){ const m = D.memory[school]; return `本机构 ${m.by} ${md(m.on)} 核对${m.src ? "，" + m.src : ""}`; }
   return "";
 }
 function addState(){      // 根据当前选择算出：学校截止日（预填值）、是否滚动录取、来源
@@ -279,7 +286,7 @@ function addSchoolCard(name){
   let body = "";
   if (st.hit){
     body += `<div class="pills" style="margin:10px 0 0">${Object.entries(st.hit.rounds).map(([r, d]) => `<button data-round="${esc(r)}" aria-pressed="${r === a.round}">${isRoll(d) ? (r === "滚动录取" ? "滚动录取" : esc(rn(r)) + " · 滚动录取") : esc(rn(r)) + " · " + d}</button>`).join("")}</div>`;
-    const note = st.hit.kind === "manual" && a.round ? DL.info[a.school].notes[a.round] : "";
+    const note = st.hit.kinds[a.round] === "manual" ? DL.info[a.school].notes[a.round] : "";
     if (note) body += `<div class="muted small" style="margin-top:6px">学校备注：${esc(note)}</div>`;
   } else if (a.school){
     body += `<div class="edit" style="margin-top:10px"><b>日期库里没有这所学校，请自己填</b>
@@ -300,7 +307,7 @@ function addSchoolCard(name){
       <div class="grid3"><label><span class="muted small">${st.rolling ? "滚动录取：和学生商定的计划递交日" : "学校截止日（专业截止更早的，直接改成专业的日期）"}</span>
         <input type="date" data-k="deadline" data-r value="${esc(a.deadline)}"></label>
         ${changed ? `<label style="grid-column:span 2"><span class="muted small">为什么改（会记进留痕）</span><input type="text" data-k="reason" value="${esc(a.reason)}" placeholder="比如：经济学专业 12-01 截止"></label>` : ""}</div>
-      ${st.dbDate ? `<div class="muted small" style="margin-top:4px">日期库：${st.dbDate}，来源 ${esc(srcText(a.school, a.round, st.hit.kind))}。学校当地时间。</div>` : ""}</div>`;
+      ${st.dbDate ? `<div class="muted small" style="margin-top:4px">日期库：${st.dbDate}，来源 ${esc(srcText(a.school, a.round, st.hit.kinds[a.round]))}。学校当地时间。</div>` : ""}</div>`;
     if (a.deadline){
       body += `<table class="steps" style="margin-top:8px"><tr><th></th><th>要做的事（都能改）</th><th>负责</th><th>截止</th></tr>
         ${a.steps.map((s, i) => `<tr><td><input type="checkbox" data-step="${i}" data-f="on" ${s.on ? "checked" : ""}></td>
@@ -317,8 +324,40 @@ function addSchoolCard(name){
     <datalist id="schools">${[...Object.keys(DL.schools), ...mem.filter(k => !DL.schools[k])].map(k => `<option value="${esc(k)}">`).join("")}</datalist>
     ${mem.length ? `<div class="muted small" style="margin-top:8px">本机构自己填过的学校：${mem.map(k => `<button class="btn ghost" style="padding:2px 10px;margin:2px" data-memschool="${esc(k)}">${esc(k)}</button>`).join("")}</div>` : ""}
     ${body}
-    ${st.hit && st.hit.kind === "mem" ? `<div class="row"><button class="linkbtn" data-act="forget">这所学校的日期填错了，删掉重填</button></div>` : ""}
+    ${st.hit && D.memory[a.school] ? `<div class="row"><button class="linkbtn" data-act="forget">本机构给这所学校填的日期有误，删掉</button></div>` : ""}
   </div>`;
+}
+
+/* ---------- 日期核对表：导出给顾问改，改好粘贴回来 ---------- */
+const SHEET_HEAD = ["地区", "学校", "轮次", "截止日", "来源", "备注"];
+function sheetText(){
+  const names = new Set([...Object.keys(DL.info), ...Object.keys(D.memory), ...D.items.map(i => i.school).filter(Boolean)]);
+  const rows = [];
+  [...names].forEach(school => { const hit = lookup(school); if (!hit) return;
+    Object.entries(hit.rounds).forEach(([r, d]) => { const k = hit.kinds[r], info = DL.info[school];
+      rows.push([regionOf(school), school, rn(r), isRoll(d) ? "滚动录取" : d, k === "mem" ? "本机构核对" : k === "manual" ? info.source : "Common App", k === "manual" && info.notes && info.notes[r] ? info.notes[r] : ""]); }); });
+  rows.sort((a, b) => REGIONS.indexOf(a[0]) - REGIONS.indexOf(b[0]) || a[1].localeCompare(b[1]));
+  return [SHEET_HEAD, ...rows].map(r => r.map(c => String(c).replace(/[\t\n]/g, " ")).join("\t")).join("\n");
+}
+function parseSheet(text){
+  const out = {rows: [], bad: [], same: 0}, RKEY = Object.fromEntries(Object.entries(RNAME).map(([k, v]) => [v, k]));
+  const normDate = v => { v = String(v || "").trim(); if (!v || /滚动|rolling/i.test(v)) return "";
+    const m = v.match(/^(\d{4})\s*[-\/.年]\s*(\d{1,2})\s*[-\/.月]\s*(\d{1,2})\s*日?$/); if (!m) return null;
+    const s = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`, d = new Date(s + "T00:00:00Z");
+    return !isNaN(d) && d.toISOString().slice(0, 10) === s ? s : null; };
+  text.split(/\r?\n/).forEach((line, n) => { if (!line.trim()) return;
+    const c = line.split(line.includes("\t") ? "\t" : /\s*[,，]\s*/).map(x => x.trim().replace(/^"|"$/g, ""));
+    let [region, school, round, dateRaw, src] = c;
+    if (school === "学校" || (!school && !round)) return;                       // 表头或空行
+    if (!school || !round) return out.bad.push({n: n + 1, why: "缺学校或轮次"});
+    if (school.length > 100 || round.length > 40) return out.bad.push({n: n + 1, why: "学校名或轮次太长"});
+    const d = normDate(dateRaw); if (d === null) return out.bad.push({n: n + 1, why: `截止日「${dateRaw}」看不懂，请写成 2026-11-30 或 滚动录取`});
+    const hit = lookup(school); round = hit && hit.rounds[round] === undefined && RKEY[round] && hit.rounds[RKEY[round]] !== undefined ? RKEY[round] : round;
+    const cur = hit ? hit.rounds[round] : undefined, old = cur === undefined ? undefined : isRoll(cur) ? "" : cur;
+    if (old === d) return void out.same++;
+    out.rows.push({region: (region || regionOf(school)).slice(0, 20), school, round, date: d, src: (src || "").slice(0, 200), kind: !hit ? "新学校" : cur === undefined ? "新轮次" : "改日期", old});
+  });
+  return out;
 }
 
 /* ---------- 顾问端 ---------- */
@@ -361,15 +400,15 @@ function capRight(idle){      // AI 整理的结果：录入页和留痕页共�
   return right;
 }
 
-/* 状态的叫法：紧急 / 临期 / 正常（规则见 config.js 的 lightRule） */
-const LN = {red:"紧急", yellow:"临期", green:"正常"};
-const lightChip = l => `<span class="chip ${l}">${LN[l]}</span>`;
-const statTiles = (label, rows, overN) => { const cnt = l => rows.filter(r => r.sm.light === l).length;
+/* 状态的叫法：逾期（红）/ 临期（黄）/ 待办（绿）。规则见 config.js 的 soonDays、lightRule */
+const LN = {red:"逾期", yellow:"临期", green:"待办"};
+const lightChip = (l, none) => none ? `<span class="chip">无待办</span>` : `<span class="chip ${l}">${LN[l]}</span>`;
+const statTiles = (label, rows) => { const cnt = l => rows.filter(r => r.sm.item && r.sm.light === l).length;
   return `<div class="tiles">
     <div class="tile"><div class="n">${rows.length}</div><div class="l">${label}</div></div>
-    <div class="tile"><div class="n" style="color:var(--red)">${cnt("red")}</div><div class="l">紧急</div></div>
+    <div class="tile"><div class="n" style="color:var(--red)">${cnt("red")}</div><div class="l">逾期</div></div>
     <div class="tile"><div class="n" style="color:var(--amber)">${cnt("yellow")}</div><div class="l">临期</div></div>
-    <div class="tile"><div class="n">${overN}</div><div class="l">逾期事项</div></div></div>`; };
+    <div class="tile"><div class="n" style="color:var(--green)">${cnt("green")}</div><div class="l">待办</div></div></div>`; };
 
 const C = {
 today(){
@@ -437,7 +476,7 @@ student(){
   const all = D.items.filter(i => i.student === name).sort((a,b) => (!!a.done - !!b.done) || diff(a.due, b.due));
   const sch = schoolsOf(name), other = all.filter(i => !i.school);
   const p = parts(name), gen = S.gen && S.gen.student === name ? S.gen : null;
-  const status = it => it.done ? `<span class="chip green">${md(it.done)} 完成</span>` : overdue(it) ? `<span class="chip red">逾期</span>` : isFam(it) && !it.agreed ? `<span class="chip">未发约定</span>` : `<span class="chip ${light(it)}">进行中</span>`;
+  const status = it => it.done ? `<span class="chip green">${md(it.done)} 完成</span>` : overdue(it) ? `<span class="chip red">逾期</span>` : isFam(it) && !it.agreed ? `<span class="chip">未发约定</span>` : `<span class="chip ${light(it)}">${LN[light(it)]}</span>`;
   const editRow = it => `<tr class="open"><td colspan="4"><div class="edit">
       <div class="grid3"><label><span class="muted small">新截止日</span><input type="date" id="ed_due" value="${esc(it.due)}"></label>
         <label style="grid-column:span 2"><span class="muted small">为什么改（会记进留痕）</span><input type="text" id="ed_reason" placeholder="比如：学校推迟了推荐信截止"></label></div>
@@ -461,7 +500,7 @@ student(){
       <div class="row" style="margin-top:0"><button class="btn" data-act="gen" data-k="progress">家长来问进度：生成回复</button><button class="btn ghost" data-act="gen" data-k="report">生成本周周报</button></div>
       ${gen && gen.k === "progress" ? `<textarea class="msg" rows="8" style="margin-top:10px">${esc(progressMsg(name))}</textarea>
         <div class="row"><button class="btn" data-act="copy" data-then="sent" data-s="${esc(name)}" data-what="进度回复">复制并记为已发</button>${varyBtn("p" + name)}</div>` : ""}
-      ${gen && gen.k === "report" ? `<div class="report"><div class="rep-h"><b>${esc(name)} 申请进度周报</b><span class="chip ${sm.light}">${sm.light === "green" ? "整体正常" : "有待办"}</span></div>
+      ${gen && gen.k === "report" ? `<div class="report"><div class="rep-h"><b>${esc(name)} 申请进度周报</b><span class="chip ${sm.light}">${{red:"有逾期事项", yellow:"有临期事项", green:"按计划进行"}[sm.light]}</span></div>
           <div class="muted small" style="margin:-4px 0 8px">${md(addDays(TODAY,-6))} 至 ${md(TODAY)}</div>
           <div class="ask">需要您做：${p.need.length ? p.need.map(i => `${md(i.due)} 前${esc(i.what)}`).join("；") : "本周没有"}</div>
           <b>本周完成</b><ul>${p.done.map(i => `<li>${esc(i.what)}，${md(i.done)}</li>`).join("") || "<li>无</li>"}</ul>
@@ -478,7 +517,7 @@ student(){
     ${S.addOpen || (!sch.length && !other.length) ? addSchoolCard(name) : ""}`;
   return `<div class="pills">${studs.map(s => `<button data-pick="${esc(s.name)}" aria-pressed="${s.name === name}"><span class="dot ${summary(s.name).light}"></span>${esc(s.name)}</button>`).join("")}<button data-act="togglenew">+ 新学生</button></div>
   ${S.newStu ? newForm : ""}
-  <div class="card"><div class="head" style="margin-bottom:0"><b>${esc(name)}</b><span class="chip ${sm.light}">${sm.waiting ? "卡在" + esc(sm.waiting) : "正常"}</span><span class="muted small">家长：${esc(stu(name).parent)} · 顾问：${esc(stu(name).consultant)}</span>
+  <div class="card"><div class="head" style="margin-bottom:0"><b>${esc(name)}</b>${sm.item ? `<span class="chip ${sm.light}">${LN[sm.light]}，卡在${esc(sm.waiting)}</span>` : `<span class="chip">无待办</span>`}<span class="muted small">家长：${esc(stu(name).parent)} · 顾问：${esc(stu(name).consultant)}</span>
     <button class="linkbtn" style="margin-left:auto" data-act="gotrail">看留痕</button></div></div>
   <div class="pills">${tabs.map(([k, l]) => `<button data-sub="${k}" aria-pressed="${S.sub === k}">${l}</button>`).join("")}</div>
   ${body}`;
@@ -495,7 +534,7 @@ overview(){
   <h2>我的学生 <span class="muted small" style="font-weight:400">${esc(CF.lightRule)}</span></h2>
   <div class="pills"><span class="muted small" style="align-self:center">卡在：</span>${["全部","学生","家长","学校","机构"].map(f => `<button data-filter="${f}" aria-pressed="${S.filter === f}">${f}</button>`).join("")}</div>
   <div class="card"><table><tr><th>状态</th><th>学生</th><th>最要紧的事</th><th>卡在</th></tr>
-    ${shown.map(({s, sm}) => `<tr class="pick" data-cpick="${esc(s.name)}"><td class="nw">${lightChip(sm.light)}</td><td class="nw">${esc(s.name)}</td><td>${esc(sm.text)}${sm.item && isFam(sm.item) && !sm.item.agreed ? ' <span class="chip">未发约定</span>' : ""}</td><td class="nw"><b>${esc(sm.waiting || "—")}</b></td></tr>`).join("") || `<tr><td colspan="4" class="muted">没有。</td></tr>`}</table>
+    ${shown.map(({s, sm}) => `<tr class="pick" data-cpick="${esc(s.name)}"><td class="nw">${lightChip(sm.light, !sm.item)}</td><td class="nw">${esc(s.name)}</td><td>${esc(sm.text)}${sm.item && isFam(sm.item) && !sm.item.agreed ? ' <span class="chip">未发约定</span>' : ""}</td><td class="nw"><b>${esc(sm.waiting || "—")}</b></td></tr>`).join("") || `<tr><td colspan="4" class="muted">没有。</td></tr>`}</table>
     <p class="muted small" style="margin:8px 0 0">点一行进入这个学生。</p></div>`;
 }};
 
@@ -513,7 +552,7 @@ board(){
   <h2>全部学生 <span class="muted small" style="font-weight:400">${esc(CF.lightRule)}</span></h2>
   <div class="pills"><span class="muted small" style="align-self:center">卡在：</span>${["全部","学生","家长","学校","机构"].map(f => `<button data-filter="${f}" aria-pressed="${S.filter === f}">${f}</button>`).join("")}</div>
   <div class="card"><table><tr><th>状态</th><th>学生</th><th>最要紧的事</th><th>卡在</th><th class="hide-m">顾问</th></tr>
-    ${shown.map(({s, sm}) => `<tr class="pick" data-opick="${esc(s.name)}"><td class="nw">${lightChip(sm.light)}</td><td class="nw">${esc(s.name)}</td><td>${esc(sm.text)}${sm.item && isFam(sm.item) && !sm.item.agreed ? ' <span class="chip">未发约定</span>' : ""}</td><td class="nw"><b>${esc(sm.waiting || "—")}</b></td><td class="muted nw hide-m">${esc(s.consultant)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">没有。</td></tr>`}</table></div>`;
+    ${shown.map(({s, sm}) => `<tr class="pick" data-opick="${esc(s.name)}"><td class="nw">${lightChip(sm.light, !sm.item)}</td><td class="nw">${esc(s.name)}</td><td>${esc(sm.text)}${sm.item && isFam(sm.item) && !sm.item.agreed ? ' <span class="chip">未发约定</span>' : ""}</td><td class="nw"><b>${esc(sm.waiting || "—")}</b></td><td class="muted nw hide-m">${esc(s.consultant)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">没有。</td></tr>`}</table></div>`;
 },
 trail(){
   const f = S.lf, cons = ["全部", ...new Set(D.students.map(s => s.consultant))];
@@ -527,6 +566,22 @@ trail(){
       <textarea hidden>${esc(text)}</textarea><button class="btn ghost" data-act="copy" style="align-self:flex-end">复制这份留痕</button></div>
       <div class="row"><button class="linkbtn" data-act="exportitems">复制全部事项（可直接粘贴到 Excel）</button></div></div>
     <div class="card">${timeline(logs)}</div>`;
+},
+dates(){
+  const sh = S.sheet, p = sh.prev;
+  return `<div class="card"><div class="head"><b>日期核对表</b><span class="muted small">让顾问核对截止日、补上库里没有的学校，改好后粘贴回来就生效</span></div>
+    <ol class="steps3"><li>点「复制核对表」，粘贴到 Excel 或腾讯文档，发给顾问。</li>
+      <li>顾问直接改「截止日」那一列；库里没有的学校在最后加一行。滚动录取的在截止日写「滚动录取」。</li>
+      <li>把改好的表格整张复制，粘贴到下面，先预览再导入。导入后本机构所有顾问加学校时用的就是新日期。</li></ol>
+    <div class="row"><button class="btn" data-act="copysheet">复制核对表</button><span class="muted small">包含英国、香港、澳洲的学校，本机构自己填过的学校，以及学生已经报名的美国学校</span></div></div>
+  <div class="card"><div class="head"><b>粘贴改好的表格</b><span class="muted small">列的顺序：地区、学校、轮次、截止日、来源、备注</span></div>
+    <textarea class="note" id="sheet_in" placeholder="从 Excel 或腾讯文档里选中表格，复制，粘贴到这里">${esc(sh.text)}</textarea>
+    <div class="row"><button class="btn" data-act="previewsheet">预览改动</button>${p ? `<button class="btn ghost" data-act="clearsheet">清空</button>` : ""}</div>
+    ${p ? `<div class="edit" style="margin-top:10px"><b>${p.rows.length ? `有 ${p.rows.length} 条改动` : "没有改动"}</b><span class="muted small">　另有 ${p.same} 条和现在一样${p.bad.length ? `，${p.bad.length} 条有问题没法导入` : ""}</span>
+      ${p.rows.length ? `<table style="margin-top:8px"><tr><th>类型</th><th>地区</th><th>学校</th><th>轮次</th><th>原来</th><th>改为</th></tr>
+        ${p.rows.map(r => `<tr><td class="nw"><span class="chip ${r.kind === "改日期" ? "yellow" : "acc"}">${r.kind}</span></td><td class="nw">${esc(r.region)}</td><td>${esc(r.school)}</td><td>${esc(r.round)}</td><td class="nw muted">${r.old === undefined ? "—" : r.old || "滚动录取"}</td><td class="nw"><b>${r.date || "滚动录取"}</b></td></tr>`).join("")}</table>` : ""}
+      ${p.bad.length ? `<div class="err" style="margin-top:8px">${p.bad.map(b => `第 ${b.n} 行：${esc(b.why)}`).join("<br>")}</div>` : ""}
+      ${p.rows.length ? `<div class="row"><button class="btn" data-act="importsheet">导入这 ${p.rows.length} 条</button><span class="muted small">会记进留痕，写明是谁导入的</span></div>` : ""}</div>` : ""}</div>`;
 }};
 
 /* ---------- 设置 ---------- */
@@ -561,7 +616,7 @@ function mic(btn){
 }
 
 /* ---------- 渲染 ---------- */
-const TABS = { c:[["overview","总览"],["today","待办"],["capture","录入留痕"],["student","学生"]], o:[["board","看板"],["trail","留痕"]], s:[["settings","设置"]] };
+const TABS = { c:[["overview","总览"],["today","待办"],["capture","录入留痕"],["student","学生"]], o:[["board","看板"],["trail","留痕"],["dates","日期库"]], s:[["settings","设置"]] };
 function render(){
   document.getElementById("brand").innerHTML = `${esc(CF.product)}<small>${esc(D.agency)} · 今天 ${esc(TODAY)}</small>`;
   const roles = D.me.role === "owner" ? [["o","老板端"],["c","顾问端"],["s","设置"]] : [["c","顾问端"],["s","设置"]];
@@ -611,7 +666,7 @@ async function act(name, ds, el){
     case "addschool": { const a = S.add, st = addState(), steps = a.steps.filter(s => s.on);
       if (steps.some(s => !s.what.trim() || !s.due)) return toast("勾选的事项都要填内容和日期");
       await api("addschool", {student: stu(ds.s).id, school: a.school, round: st.round, deadline: a.deadline, db_deadline: st.dbDate || null,
-        rolling: st.rolling, region: a.region || regionOf(a.school), reason: a.reason, source: st.hit ? srcText(a.school, a.round, st.hit.kind) : a.src, remember: !st.hit && a.remember,
+        rolling: st.rolling, region: a.region || regionOf(a.school), reason: a.reason, source: st.hit ? srcText(a.school, a.round, st.hit.kinds[a.round]) : a.src, remember: !st.hit && a.remember,
         steps: steps.map(s => ({what: s.what.trim(), owner: s.owner, due: s.due, edited: s.edited}))}, `${a.school} 的 ${steps.length} 条事项`);
       S.openSchool = a.school; S.addOpen = false; S.sub = "schools"; S.add = blankAdd(); render(); return toast(`已写入 ${steps.length} 条事项`); }
     case "forget": if (!confirm(`删除本机构记住的 ${S.add.school} 的日期？`)) return;
@@ -635,6 +690,11 @@ async function act(name, ds, el){
       if (target) await api("replied", {item: target, text: t.slice(0, 300)}, `${who} 家长的回复`);
       else await api("parentnote", {student: stu(who).id, text: t.slice(0, 300)}, `${who} 家长的回复`);
       return toast("已记进留痕"); }
+    case "copysheet": return copy(sheetText()).then(() => toast("已复制，去 Excel 或腾讯文档粘贴"));
+    case "previewsheet": { const t = val("sheet_in"); if (!t.trim()) return toast("先把表格粘贴进来"); S.sheet = {text: t, prev: parseSheet(t)}; return render(); }
+    case "clearsheet": S.sheet = {text:"", prev:null}; return render();
+    case "importsheet": { const rows = S.sheet.prev.rows; await api("importdates", {rows});
+      S.sheet = {text:"", prev:null}; render(); return toast(`已导入 ${rows.length} 条，加学校时马上生效`); }
     case "rmimg": S.cap.imgs.splice(+ds.i, 1); return render();
     case "addrow": S.cap.rows.push(blankRow()); return render();
     case "manualadd": { const rows = S.cap.rows.filter(r => r.what.trim() || r.due);

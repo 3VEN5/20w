@@ -206,3 +206,14 @@ def test_school_region_and_parent_note(setup):
     st = act(wang, "parentnote", student=sid, text="好的，下周我们去开存款证明")
     assert st["logs"][0]["src"] == "微信回复" and st["logs"][0]["who"] == "张妈妈" and "存款证明" in st["logs"][0]["act"]
     assert wang.post("/api/act", json={"op": "parentnote", "student": sid, "text": ""}, headers=H).status_code == 400
+
+
+def test_import_dates(setup):
+    a, wang, sid = setup
+    rows = [{"school": "UCL", "round": "UCAS 1 月截止", "date": "2027-01-10", "region": "英国", "src": "顾问核对"},
+            {"school": "McGill University", "round": "滚动录取", "date": "", "region": "加拿大"}]
+    assert wang.post("/api/act", json={"op": "importdates", "rows": rows}, headers=H).status_code == 403
+    st = act(a, "importdates", rows=rows)
+    assert st["memory"]["UCL"]["d"]["UCAS 1 月截止"] == "2027-01-10" and st["memory"]["McGill University"] == {"d": {"滚动录取": ""}, "by": "老板甲", "on": st["today"], "src": "核对表导入", "region": "加拿大"}
+    assert "导入 2 条日期" in st["logs"][0]["act"]
+    assert a.post("/api/act", json={"op": "importdates", "rows": [{"school": "X", "round": "RD", "date": "2027-13-01"}]}, headers=H).status_code == 400

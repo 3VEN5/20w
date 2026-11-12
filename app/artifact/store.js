@@ -146,6 +146,16 @@ const ACT = {
     return log(id, "学生", `新建学生 ${name}，家长称呼 ${parent}，负责顾问 ${memberName(cid)}`); },
   async archivestudent(b){ const s = student(b.student); await W.upd("students", s.id, {archived: true});
     return log(s.id, "学生", `${s.name} 已结案（不再显示，记录保留）`); },
+  async importdates(b){ if (!isOwnerRole()) bad("只有老板能导入日期");
+    const rows = (b.rows || []).slice(0, 500); if (!rows.length) bad("没有要导入的内容");
+    const by = {};
+    for (const r of rows){ const school = txt(r.school, "学校", 100), rnd = txt(r.round, "轮次", 40), d = r.date ? date(r.date, "截止日") : "";      // 空 = 滚动录取
+      const v = (by[school] ??= {d: {}, region: "", src: ""}); v.d[rnd] = d; v.region = txt(r.region, "地区", 20, false) || v.region; v.src = txt(r.src, "来源", 200, false) || v.src; }
+    const me = meName();
+    for (const [school, v] of Object.entries(by)){ const old = [...RAW.memory.entries()].find(([, m]) => m.school === school);
+      const id = old ? old[0] : encodeURIComponent(school).replace(/[^A-Za-z0-9_\-.~:@+]/g, "_").slice(0, 180) || "school";
+      await W.set("memory", id, {school, d: {...(old ? old[1].d : {}), ...v.d}, by: me, on: todayCN(), src: v.src || "核对表导入", region: v.region || (old ? old[1].region : "") || ""}); }
+    return log(null, "日期库", `${me}从核对表导入 ${rows.length} 条日期，涉及 ${Object.keys(by).length} 所学校：` + rows.slice(0, 30).map(r => `${r.school} ${r.round} ${r.date || "滚动录取"}`).join("；") + (rows.length > 30 ? " 等" : "")); },
   async forget(b){ const school = txt(b.school, "学校", 100);
     for (const [id, m] of RAW.memory) if (m.school === school) await DB.collection("memory").doc(id).delete();
     return log(null, "学校记忆", `删除自填学校 ${school} 的日期`); },
