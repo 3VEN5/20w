@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-11T15:13Z",
+ "generated_at": "2026-11-11T15:51Z",
  "count": 2062,
  "deadlines": [
   {
@@ -14,7 +14,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://adelaide.edu.au/content/dam/adelaideuniversity/documents/about/pdfs/adelaide-university-2027-international-student-guide-condensed.pdf",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -28,7 +28,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://study.anu.edu.au/apply/international-applications",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -42,7 +42,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://study.anu.edu.au/apply/international-applications",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -50,13 +50,13 @@
    "school_type": "",
    "round": "滚动录取",
    "deadline": "",
-   "note": "官网写全年可申请，名额满即停止；建议开学前 4 个月递交（建议值，待团队确认）；官网拒绝程序访问，需要人工定期查看",
+   "note": "官网原话：国际生全年任何时间都可申请（2026-11-11 核对），名额满即停止；建议开学前 4 个月递交（建议值，待团队确认）；官网拒绝程序访问，需要人工定期查看",
    "fee_us": "",
    "fee_intl": "",
    "source": "学校官网（人工核实）",
    "source_url": "https://www.monash.edu/admissions/apply/international-ug",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -70,21 +70,21 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://unsw.edu.au/study/international-students/admissions-info",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
    "school": "University of Melbourne",
    "school_type": "",
-   "round": "滚动录取",
-   "deadline": "",
-   "note": "官网没有统一截止日，名额满即停止；建议开学前 4 个月递交（建议值，待团队确认）；官网拒绝程序访问，需要人工定期查看",
+   "round": "2027 第一学期（2 月入学）",
+   "deadline": "2026-11-30",
+   "note": "官网日期页还停在 2025 年。交叉核对 8 个网上来源：7 个写 2026-11-30（One U 11-06 转发的墨大通知、One U 05-06、Leap 两篇、UNILINK、StudyU、StudyAU 马来西亚），1 个写 2026-10-31（Collegedunia，说 11-30 是去年的一次性延期）；往年规律也是 11-30（2025 年第一学期截止 2024-11-30）；艺术、音乐等要试演的专业更早；建议找学校代表再确认；官网拒绝程序访问，需要人工定期查看",
    "fee_us": "",
    "fee_intl": "",
    "source": "学校官网（人工核实）",
-   "source_url": "https://study.unimelb.edu.au/how-to-apply/undergraduate-study/international-applications/entry-requirements/important-dates",
+   "source_url": "https://www.oneuedu.com/en-US/news/13890",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -98,7 +98,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://study.uq.edu.au/admissions/undergraduate/submit-your-application",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -112,7 +112,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://study.uq.edu.au/admissions/undergraduate/submit-your-application",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -126,7 +126,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.sydney.edu.au/study/how-to-apply/application-dates.html",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -140,7 +140,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.sydney.edu.au/study/how-to-apply/application-dates.html",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -154,7 +154,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.uwa.edu.au/study/How-to-apply/Undergraduate-international",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "澳洲",
@@ -168,7 +168,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.uwa.edu.au/study/How-to-apply/Undergraduate-international",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "美国",
@@ -28476,7 +28476,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28490,7 +28490,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28504,7 +28504,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28518,7 +28518,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28532,7 +28532,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28546,7 +28546,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28560,7 +28560,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28574,7 +28574,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28588,7 +28588,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "英国",
@@ -28602,7 +28602,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.ucas.com/ucas/undergraduate/getting-started/when-apply",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28616,7 +28616,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://ln.edu.hk/admissions/ug/overseas/apply/admission-requirements",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28630,7 +28630,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://ln.edu.hk/admissions/ug/overseas/apply/admission-requirements",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28644,7 +28644,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://ln.edu.hk/admissions/ug/overseas/apply/admission-requirements",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28658,7 +28658,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://admission.cuhk.edu.hk/application/overseas-other-qualifications-non-local-international-team/application-guides/",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28672,7 +28672,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://admission.cuhk.edu.hk/application/overseas-other-qualifications-non-local-international-team/application-guides/",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28686,7 +28686,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.cityu.edu.hk//admo/news/2027_Flyer_Non-JUPAS_Admission.pdf",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28700,7 +28700,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.cityu.edu.hk//admo/news/2027_Flyer_Non-JUPAS_Admission.pdf",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28714,7 +28714,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://admissions.hku.hk/sites/default/files/2026-09/HKU_General_Information_NJ_2027.pdf",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28728,7 +28728,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://admissions.hku.hk/sites/default/files/2026-09/HKU_General_Information_NJ_2027.pdf",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28742,7 +28742,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.apply.eduhk.hk/ug/nonlocal_dates",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28756,7 +28756,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.apply.eduhk.hk/ug/nonlocal_dates",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28770,7 +28770,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.apply.eduhk.hk/ug/nonlocal_dates",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28778,13 +28778,13 @@
    "school_type": "",
    "round": "主批（国际生）",
    "deadline": "2027-01-04",
-   "note": "2027 入学；页面版式较乱，请人工复核",
+   "note": "2027 入学；2026-11-11 再次核对官网国际生栏目，日期一致",
    "fee_us": "",
    "fee_intl": "",
    "source": "学校官网（人工核实）",
    "source_url": "https://admissions.hkbu.edu.hk/ug/intl_prospectus",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28792,13 +28792,13 @@
    "school_type": "",
    "round": "延长批（国际生）",
    "deadline": "2027-05-31",
-   "note": "2027 入学；页面版式较乱，请人工复核",
+   "note": "2027 入学；2026-11-11 再次核对官网国际生栏目，日期一致",
    "fee_us": "",
    "fee_intl": "",
    "source": "学校官网（人工核实）",
    "source_url": "https://admissions.hkbu.edu.hk/ug/intl_prospectus",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28812,7 +28812,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.polyu.edu.hk/saso/docdrive/Public/AdmissionLeaflets/infosheet_non_jupas_2027.pdf",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28826,7 +28826,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.polyu.edu.hk/saso/docdrive/Public/AdmissionLeaflets/infosheet_non_jupas_2027.pdf",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28840,7 +28840,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://www.polyu.edu.hk/saso/docdrive/Public/AdmissionLeaflets/infosheet_non_jupas_2027.pdf",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28854,7 +28854,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://join.hkust.edu.hk/node/7",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   },
   {
    "region": "香港",
@@ -28868,7 +28868,7 @@
    "source": "学校官网（人工核实）",
    "source_url": "https://join.hkust.edu.hk/node/7",
    "source_updated": "2026-11-11",
-   "fetched_at": "2026-11-11T15:13Z"
+   "fetched_at": "2026-11-11T15:51Z"
   }
  ]
 }
