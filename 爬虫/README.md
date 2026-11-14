@@ -7,6 +7,7 @@
 | 地区 | 学校 | 方式 |
 |---|---|---|
 | 美国 | Common App 总表里的 1126 所 | 自动解析 PDF，得到 ED / EDII / EA / EAII / REA / RD 的截止日和申请费 |
+| 美国（Common App 以外） | UC 九个校区、MIT、Yale | 各用自己的申请系统或不在总表里。日期写在 `manual_deadlines.csv`，按官网人工核实 |
 | 英国 | 牛津、剑桥、帝国理工、UCL、LSE、爱丁堡、KCL、曼彻斯特、布里斯托、华威 | 都走 UCAS，日期统一。日期写在 `manual_deadlines.csv`，程序每周监控 UCAS 截止日页和帝国理工截止日页 |
 | 香港 | 港大、中大、科大、理工、城大、浸会、岭南、教大 | 日期从各校官网读出后写在 `manual_deadlines.csv`，程序每周监控各校页面 |
 | 澳洲 | 悉尼、UNSW、ANU、昆士兰、西澳有日期；墨尔本、Monash、Adelaide 是滚动录取，没有固定截止日 | 同上 |

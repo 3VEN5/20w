@@ -89,6 +89,17 @@ window.CFG = {
 
   // 学校的中文名和简称。顾问输入这些也能搜到学校。左边必须和日期库里的学校名一字不差。
   aliases: {
+    "UC Berkeley": ["加州大学伯克利", "伯克利", "UCB"],
+    "UCLA": ["加州大学洛杉矶", "洛杉矶分校"],
+    "UC San Diego": ["加州大学圣地亚哥", "圣地亚哥分校", "UCSD"],
+    "UC Davis": ["加州大学戴维斯", "戴维斯", "UCD"],
+    "UC Irvine": ["加州大学尔湾", "尔湾", "UCI"],
+    "UC Santa Barbara": ["加州大学圣塔芭芭拉", "圣塔芭芭拉", "UCSB"],
+    "UC Santa Cruz": ["加州大学圣克鲁兹", "圣克鲁兹", "UCSC"],
+    "UC Riverside": ["加州大学河滨", "河滨", "UCR"],
+    "UC Merced": ["加州大学默塞德", "默塞德", "UCM"],
+    "Massachusetts Institute of Technology": ["麻省理工", "MIT"],
+    "Yale University": ["耶鲁", "耶鲁大学"],
     "Harvard University": ["哈佛", "哈佛大学"],
     "Princeton University": ["普林斯顿", "普林斯顿大学"],
     "Columbia University": ["哥大", "哥伦比亚大学"],
