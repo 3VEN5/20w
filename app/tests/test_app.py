@@ -168,9 +168,10 @@ def test_image_extract(setup, monkeypatch):
     r = wang.post("/api/extract", json={"student": sid, "text": "", "images": [PNG]}, headers=H)
     assert r.status_code == 400                                           # 没配 AI 不能识别
     monkeypatch.setenv("AI_API_KEY", "k")
+    monkeypatch.setenv("AI_VISION_MODEL", "off")
     r = wang.post("/api/extract", json={"student": sid, "text": "", "images": [PNG]}, headers=H)
-    assert r.status_code == 400 and "图片识别" in r.json()["detail"]       # 只配了 DeepSeek，没配看图模型
-    monkeypatch.setenv("AI_VISION_MODEL", "qwen-vl-max")
+    assert r.status_code == 400 and "图片识别" in r.json()["detail"]       # 关掉了图片识别
+    monkeypatch.delenv("AI_VISION_MODEL")                                 # 默认：图片也走 DeepSeek（deepseek-flash），同一个密钥
     assert wang.get("/api/state").json()["aiImages"] is True
     assert wang.post("/api/extract", json={"student": sid, "images": ["data:text/html;base64,AAAA"]}, headers=H).status_code == 400
     assert wang.post("/api/extract", json={"student": sid, "images": [PNG] * 5}, headers=H).status_code == 400
@@ -190,7 +191,7 @@ def test_image_extract(setup, monkeypatch):
     out = r.json()
     assert [x["what"] for x in out["newItems"]] == ["付雅思送分费"] and out["dropped"] == 1
     assert "雅思送分费" in out["transcript"]
-    assert sent["url"].startswith("https://dashscope.aliyuncs.com") and sent["body"]["model"] == "qwen-vl-max"
+    assert sent["url"].startswith("https://api.deepseek.com") and sent["body"]["model"] == "deepseek-flash"
     assert sent["body"]["messages"][0]["role"] == "system" and sent["body"]["messages"][1]["content"][1]["image_url"]["url"] == PNG
     st = act(wang, "found", student=sid, found=[{"kind": "note", "item": None, "text": "行，辛苦老师", "quote": "行，辛苦老师"}])
     assert st["logs"][0]["src"] == "微信回复" and "辛苦老师" in st["logs"][0]["act"]

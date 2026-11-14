@@ -226,6 +226,25 @@ window.CFG = {
     REA: "REA 是限制性提前批：不绑定，但同时申请别的学校提前批会受限制，具体以这所学校官网为准。"
   },
   roundNotes: {
+    "Harvard University": {
+      REA: "不能同时申请其他私立大学的提前批；公立大学和美国以外大学的 EA 可以申请。"
+    },
+    "Stanford University": {
+      REA: "不能同时申请其他私立大学的任何提前批，也不能申请公立大学的绑定提前批。公立大学的非绑定提前批、滚动录取、美国以外的大学可以申请；被延后或拒绝后可以申请别校 ED II。"
+    },
+    "Princeton University": {
+      REA: "不能同时申请其他私立大学的提前批；公立大学、美国以外大学的非绑定提前批和非绑定滚动录取可以申请。"
+    },
+    "Yale University": {
+      REA: "不能同时申请其他学校的 EA 或 ED。例外：非绑定的滚动录取、公立大学的非绑定提前批、1 月 1 日之后才放榜的提前批（如 ED II）、美国以外的大学。"
+    },
+    "California Institute of Technology (Caltech)": {
+      REA: "不能同时申请其他学校的 EA 或 ED。例外：美国以外的大学、公立大学的非绑定申请（如 UC）、非绑定滚动录取；被延后以后可以申请别校 ED II。"
+    },
+    "Carnegie Mellon University": {
+      ED: "戏剧学院、音乐学院和 BXA 设计项目不能 ED。",
+      RD: "戏剧和音乐学院的截止是 12 月 1 日，比这里的日期早。"
+    },
     "Georgia Institute of Technology": {
       EA: "这一轮（EA1）只给佐治亚州的学生。州外和国际学生请选 EA II。",
       EAII: "这一轮（EA2）给佐治亚州以外的学生，包括国际学生。想评奖学金必须走提前批。"

@@ -84,8 +84,8 @@ sudo crontab -u app -e
 | 功能 | 填什么 | 去哪里拿 |
 |---|---|---|
 | 文字整理 | `AI_API_KEY=sk-...`（默认用 DeepSeek，模型 deepseek-chat） | platform.deepseek.com 注册、充值、建 API key |
-| 图片识别 | `AI_VISION_MODEL=qwen-vl-max`，`AI_VISION_API_KEY=sk-...` | 阿里云百炼（通义千问）开通、建 API key。DeepSeek 不能看图 |
+| 图片识别 | 不用配，默认用 DeepSeek 的 `deepseek-flash`，和上面同一个密钥 | 想换别家再填 `AI_VISION_MODEL`、`AI_VISION_BASE_URL`、`AI_VISION_API_KEY`；`AI_VISION_MODEL=off` 关掉 |
 
-只想用一家：把 `AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`、`AI_MODEL=qwen-plus`、`AI_API_KEY` 都填通义千问的，图片再填 `AI_VISION_MODEL=qwen-vl-max` 就行（`AI_VISION_API_KEY` 不填会用 `AI_API_KEY`）。
+想全部改用通义千问：把 `AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`、`AI_MODEL=qwen-plus`、`AI_API_KEY` 都填通义千问的，再填 `AI_VISION_MODEL=qwen-vl-max`、`AI_VISION_BASE_URL` 同上。
 密钥只放在服务器的 `/srv/app.env`，不要发到群里或提交到 GitHub。
 - 给机构的数据说明：我们存什么、不存什么、试用结束后怎么删除（`manage.py` 之外，直接删 `/srv/data/app.db` 和备份）。

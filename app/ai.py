@@ -8,9 +8,8 @@
 配置（环境变量）：AI_API_KEY（必填，不填就只能手动添加）、AI_BASE_URL（默认 DeepSeek）、AI_MODEL（默认 deepseek-chat）。
 任何兼容 OpenAI 接口的服务都能用，比如 DeepSeek、通义千问。
 
-图片识别（可选）：DeepSeek 不能看图，要另配一个能看图的模型。填了 AI_VISION_MODEL 才开通。
-  AI_VISION_MODEL（比如 qwen-vl-max）、AI_VISION_BASE_URL（默认通义千问 https://dashscope.aliyuncs.com/compatible-mode/v1）、
-  AI_VISION_API_KEY（不填就用 AI_API_KEY）。
+图片识别：默认也用 DeepSeek，模型 deepseek-flash（能看图），和文字用同一个密钥，不用另外配。
+  想换别家：AI_VISION_MODEL（比如 qwen-vl-max）、AI_VISION_BASE_URL、AI_VISION_API_KEY。AI_VISION_MODEL=off 关掉图片识别。
 图片里的原话核对的是模型自己转写出的文字，所以页面会把转写给顾问对照图片看。图片不保存。
 """
 import json, os, re
@@ -19,6 +18,7 @@ from datetime import datetime
 import httpx
 
 OWNERS = {"学生", "家长", "学校", "机构"}
+VISION_MODEL = "deepseek-flash"      # DeepSeek 能看图的模型（官方文档 api-docs.deepseek.com/guides/vision）
 
 
 class AIError(Exception):
@@ -30,7 +30,7 @@ def enabled():
 
 
 def images_enabled():
-    return bool(os.environ.get("AI_VISION_MODEL") and (os.environ.get("AI_VISION_API_KEY") or os.environ.get("AI_API_KEY")))
+    return os.environ.get("AI_VISION_MODEL", VISION_MODEL) != "off" and bool(os.environ.get("AI_VISION_API_KEY") or os.environ.get("AI_API_KEY"))
 
 
 # 提示词：系统提示词讲规则和格式（固定不变），用户消息放这一次的材料。DeepSeek、通义千问、豆包、Kimi、智谱等国内模型都能直接用。
@@ -148,7 +148,7 @@ def extract(text, student, parent, open_items, today, images=(), schools=()):
     user = (USER_PROMPT.replace("{today}", today).replace("{student}", student).replace("{parent}", parent).replace("{items}", items).replace("{schools}", "、".join(schools) or "（还没有）")
             .replace("{imgnote}", f"（另附 {len(images)} 张图片）" if images else "").replace("{text}", text or "（没有文字，只有图片）"))
     if images:
-        model, base = os.environ["AI_VISION_MODEL"], os.environ.get("AI_VISION_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        model, base = os.environ.get("AI_VISION_MODEL", VISION_MODEL), os.environ.get("AI_VISION_BASE_URL", "https://api.deepseek.com")
         key = os.environ.get("AI_VISION_API_KEY") or os.environ["AI_API_KEY"]
         content = [{"type": "text", "text": user}] + [{"type": "image_url", "image_url": {"url": u}} for u in images]
         body = {"model": model, "temperature": 0, "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}]}
