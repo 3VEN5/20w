@@ -359,21 +359,23 @@ function addSchoolCard(name){
 
 /* ---------- 找学校：库里的写法、中文名、简称、首字母缩写都能搜 ---------- */
 const ALIAS = CF.aliases || {};
+const T2S = {"學":"学","國":"国","會":"会","濟":"济","經":"经","傳":"传","藝":"艺","術":"术","醫":"医","業":"业","師":"师","範":"范","東":"东","華":"华","電":"电","農":"农","財":"财","語":"语","貿":"贸","廣":"广","門":"门","灣":"湾","聖":"圣","倫":"伦","劍":"剑","橋":"桥","愛":"爱","亞":"亚","爾":"尔","頓":"顿","紐":"纽","約":"约","蘭":"兰","聯":"联","區":"区","嶺":"岭","樹":"树","員":"员","羅":"罗","馬":"马","麥":"麦","內":"内","寧":"宁","賓":"宾","達":"达","維":"维","諾":"诺","漢":"汉","堅":"坚","納":"纳","魯":"鲁","萊":"莱","歐":"欧","臺":"台","應":"应","設":"设","計":"计","環":"环","際":"际","關":"关","齊":"齐"};
+const normQ = q => q.trim().toLowerCase().replace(/^the\s+/, "").replace(/[\u4e00-\u9fff]/g, c => T2S[c] || c);   // 繁体、开头的 The 都按同一所学校算
 const acr = n => n.replace(/[-,:()&.']/g, " ").split(/\s+/).filter(w => w && !/^(of|the|at|in|and|for)$/i.test(w)).map(w => w[0]).join("").toLowerCase();
 let SIDX = null;
 function schoolIndex(){
   const mem = Object.keys(D.memory);
-  if (!SIDX || SIDX.k !== mem.join("|")) SIDX = {k: mem.join("|"), list: [...new Set([...Object.keys(DL.schools), ...mem])].map(n => ({n, low: n.toLowerCase(), acr: /^[\x00-\x7f]+$/.test(n) ? acr(n) : "", al: (ALIAS[n] || []).map(a => a.toLowerCase())}))};
+  if (!SIDX || SIDX.k !== mem.join("|")) SIDX = {k: mem.join("|"), list: [...new Set([...Object.keys(DL.schools), ...mem])].map(n => ({n, low: normQ(n), acr: /^[\x00-\x7f]+$/.test(n) ? acr(n) : "", al: (ALIAS[n] || []).map(normQ)}))};
   return SIDX.list;
 }
 function findSchools(q, limit = 6){
-  q = q.trim().toLowerCase(); if (!q) return [];
+  q = normQ(q); if (!q) return [];
   const sc = s => s.low === q || s.al.includes(q) ? 0 : (q.length > 1 && s.acr === q) ? 1 : s.low.startsWith(q) || s.al.some(a => a.startsWith(q)) ? 2 : s.low.includes(q) || s.al.some(a => a.includes(q)) ? 3 : 9;
   return schoolIndex().map(s => [sc(s), s.n]).filter(x => x[0] < 9).sort((a, b) => a[0] - b[0] || a[1].length - b[1].length).slice(0, limit).map(x => x[1]);
 }
 function resolveSchool(q){          // 输入能唯一对上一所学校时，返回库里的名字
   q = q.trim(); if (!q || lookup(q)) return q;
-  const low = q.toLowerCase(), idx = schoolIndex(), exact = idx.filter(s => s.low === low || s.al.includes(low));
+  const low = normQ(q), idx = schoolIndex(), exact = idx.filter(s => s.low === low || s.al.includes(low));
   if (exact.length) return exact.length === 1 ? exact[0].n : q;
   const a = low.length > 1 ? idx.filter(s => s.acr === low) : [];
   return a.length === 1 ? a[0].n : q;
@@ -452,8 +454,8 @@ const noStudents = () => `<div class="card"><div class="empty">还没有学生�
 
 const DOCNAME = {offer:"录取通知", "补材料":"补材料通知", "面试":"面试通知", "拒信":"拒信", "候补":"候补通知", "其他":"学校来信"};
 function afterExtract(cp){      // 学校名对到库里的写法；来信里没写日期的常见后续，列出来但默认不勾
-  const r = cp.res, d = r.doc, same = (m, low) => m.toLowerCase() === low || (ALIAS[m] || []).some(x => x.toLowerCase() === low),
-    known = n => { const low = n.trim().toLowerCase();      // 先对学生已报名的学校，再对别名，最后按库里的写法
+  const r = cp.res, d = r.doc, same = (m, low) => normQ(m) === low || (ALIAS[m] || []).some(x => normQ(x) === low),
+    known = n => { const low = normQ(n);      // 先对学生已报名的学校，再对别名，最后按库里的写法
       return schoolsOf(cp.student).map(x => x.school).find(m => same(m, low)) || Object.keys(ALIAS).find(m => same(m, low)) || resolveSchool(n); };
   r.newItems.forEach(u => { u.school = u.school ? known(u.school) : ""; });
   if (!d) return;
@@ -472,16 +474,16 @@ function capRight(idle){      // AI 整理的结果：录入页和留痕页共�
     right = `<div class="card">
       ${d ? `<div class="head"><b>学校来信</b><span class="chip ${d.result === "拒绝" ? "red" : d.result ? "green" : "acc"}">${esc(d.result || DOCNAME[d.type])}</span><span class="chip">核对后记到学校下面</span></div>
       <div class="upd ${cp.offD ? "off" : ""}"><input type="checkbox" data-updd ${cp.offD ? "" : "checked"} aria-label="记录这封来信">
-        <div class="what grid3"><input type="text" data-doc="school" value="${esc(d.school)}" aria-label="学校"><input type="text" data-doc="program" value="${esc(d.program)}" placeholder="专业（可不填）" aria-label="专业">
+        <div class="what grid3" style="grid-template-columns:1.3fr 1.5fr 1fr"><input type="text" data-doc="school" value="${esc(d.school)}" aria-label="学校"><input type="text" data-doc="program" value="${esc(d.program)}" placeholder="专业（可不填）" aria-label="专业">
           <select data-doc="result" aria-label="结果">${["", "有条件录取", "无条件录取", "拒绝", "候补"].map(x => `<option value="${x}" ${x === d.result ? "selected" : ""}>${x || DOCNAME[d.type]}</option>`).join("")}</select></div>
-        <div class="src">原话：“${esc(d.quote)}”</div></div>
+        <div class="src">原话：“${esc(d.quote)}”${d.result === "有条件录取" && !d.conditions.length ? ' <b class="err">没读到录取条件，可能在后面几页，请把剩下的页也加上再整理一次</b>' : ""}</div></div>
       ${d.conditions.map((c, i) => `<div class="upd ${cp.offD || cp.offC[i] ? "off" : ""}"><input type="checkbox" data-updc="${i}" ${cp.offC[i] ? "" : "checked"} aria-label="记录这条条件">
         <div class="what"><span class="chip acc">条件</span> ${esc(c.text)}${c.due ? `<span class="muted small">　${md(c.due)}前</span>` : ""}</div>
         <div class="src">原话：“${esc(c.quote)}”</div></div>`).join("")}` : ""}
       ${r.newItems.length ? `<div class="head" ${d ? 'style="margin-top:12px"' : ""}><b>新事项</b><span class="chip">勾掉不对的，日期可改</span></div>
       ${r.newItems.map((u, i) => `<div class="upd ${cp.off[i] ? "off" : ""}"><input type="checkbox" data-upd="${i}" ${cp.off[i] ? "" : "checked"}>
         <div class="what grid3"><input type="text" data-res="${i}" data-f="what" value="${esc(u.what)}">${ownerSel(u.owner, `data-res="${i}" data-f="owner"`)}<input type="date" data-res="${i}" data-f="due" value="${esc(u.due)}"></div>
-        <div class="src">${u.sug ? "来信里没写日期的常见后续，需要就勾上并填日期" : `原话：“${esc(u.quote)}”`}${u.school ? `　归到：${esc(u.school)}` : ""}${u.due || u.sug ? "" : ' <b class="err">原文没写日期，请填</b>'}</div></div>`).join("")}` : ""}
+        <div class="src">${u.sug ? "来信里没写日期的常见后续，需要就勾上并填日期" : `原话：“${esc(u.quote)}”`}${u.school ? `　归到：${esc(u.school)}` : ""}${u.due || u.sug ? "" : ' <b class="err">日期没写或看不清，请对照原件填</b>'}</div></div>`).join("")}` : ""}
       ${r.found.length ? `<div class="head" style="margin-top:12px"><b>家长回复和进展</b></div>
       ${r.found.map((u, i) => { const it = itemById(u.item); return `<label class="upd ${cp.offF[i] ? "off" : ""}"><input type="checkbox" data-updf="${i}" ${cp.offF[i] ? "" : "checked"}>
         <div class="what"><span class="chip ${u.kind === "done" ? "green" : "acc"}">${u.kind === "done" ? "已完成" : u.kind === "note" ? "家长回复，只留痕" : "家长已回复"}</span> ${esc(it ? it.what : u.text)}</div>
@@ -768,7 +770,7 @@ async function act(name, ds, el){
     case "clearcap": S.cap.res = null; return render();
     case "confirmcap": { const cp = S.cap, r = cp.res, sid = stu(cp.student).id;
       const on = r.newItems.filter((u, i) => !cp.off[i]), fd = r.found.filter((u, i) => !cp.offF[i]);
-      if (on.some(u => !u.due || !u.what.trim())) return toast("每条事项都要有截止日");
+      if (on.some(u => !u.due || !u.what.trim())) return toast("勾上的事项还有没填日期的，填上日期或取消勾选");
       const d = r.doc && !cp.offD ? r.doc : null;
       if (d && !d.school.trim()) return toast("请填学校名");
       if (on.length) await api("additems", {student: sid, items: on.map(u => ({what: u.what, owner: u.owner, due: u.due, school: u.school, quote: u.quote})), from: d ? "AI 识别学校来信" : cp.imgs.length ? "AI 整理笔记/聊天/图片" : "AI 整理笔记/聊天"}, `${on.length} 条事项`);
