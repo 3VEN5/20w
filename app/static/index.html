@@ -64,6 +64,7 @@ textarea.note{background:var(--surface);min-height:190px}
 .upd > input[type=checkbox]{width:16px;height:16px;margin-top:5px;accent-color:var(--accent)}
 .upd .src{grid-column:2;font-size:12.5px;color:var(--muted);background:var(--sunk);border-radius:6px;padding:2px 8px}
 .upd.off .what{text-decoration:line-through;color:var(--muted)}
+.duefix{display:inline-flex;gap:6px;align-items:center;margin-left:8px;vertical-align:middle}.duefix input{width:auto;padding:3px 8px}
 .orow{display:flex;gap:6px 8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);font-size:14px}.orow .ow{flex:1;min-width:200px}.orow .ob{display:flex;gap:6px}.orow .btn{padding:3px 10px;font-size:13px}
 .outs{margin:6px 0 4px 22px;padding:8px 12px;background:var(--sunk);border-radius:8px;font-size:13.5px} .outs ul{margin:4px 0 0;padding-left:18px} .outs > div + div{margin-top:8px}
 .thinking{display:flex;gap:10px;align-items:center;color:var(--muted);padding:30px 0;justify-content:center}
@@ -518,7 +519,7 @@ function capRight(idle){      // AI 整理的结果：录入页和留痕页共�
         <div class="src">${u.sug ? "来信里没写日期的常见后续，需要就勾上并填日期" : `原话：“${esc(u.quote)}”`}${u.school ? `　归到：${esc(u.school)}` : ""}${u.due || u.sug ? "" : ' <b class="err">日期没写或看不清，请对照原件填</b>'}</div></div>`).join("")}` : ""}
       ${r.found.length ? `<div class="head" style="margin-top:12px"><b>已有事项的变化</b></div>
       ${r.found.map((u, i) => { const it = itemById(u.item); return `<label class="upd ${cp.offF[i] ? "off" : ""}"><input type="checkbox" data-updf="${i}" ${cp.offF[i] ? "" : "checked"}>
-        <div class="what"><span class="chip ${u.kind === "done" ? "green" : u.kind === "cancel" ? "red" : "acc"}">${u.kind === "done" ? "已完成" : u.kind === "cancel" ? "取消这件事" : u.kind === "note" ? "家长回复，只留痕" : "家长已回复"}</span> ${u.kind === "cancel" && it ? `<s>${esc(it.what)}</s><span class="muted small">　原截止 ${md(it.due)}，确认后划掉并记进留痕</span>` : esc(it ? it.what : u.text)}</div>
+        <div class="what"><span class="chip ${u.kind === "done" ? "green" : u.kind === "cancel" ? "red" : u.kind === "due" ? "yellow" : "acc"}">${u.kind === "done" ? "已完成" : u.kind === "cancel" ? "取消这件事" : u.kind === "due" ? "改截止日" : u.kind === "note" ? "家长回复，只留痕" : "家长已回复"}</span> ${u.kind === "cancel" && it ? `<s>${esc(it.what)}</s><span class="muted small">　原截止 ${md(it.due)}，确认后划掉并记进留痕</span>` : u.kind === "due" && it ? `${esc(it.what)}<span class="duefix"><span class="muted small">${md(it.due)} 改为</span><input type="date" data-fd="${i}" value="${esc(u.due || "")}" aria-label="新截止日">${u.due ? "" : '<b class="err">新日期没说清，请填</b>'}</span>` : esc(it ? it.what : u.text)}</div>
         <div class="src">原话：“${esc(u.quote)}”</div></label>`; }).join("")}` : ""}
       ${r.transcript ? `<details class="small" style="margin-top:10px"><summary>图片里识别出的文字（请对照图片核对，原话都从这里来）</summary><div class="src" style="white-space:pre-wrap">${esc(r.transcript)}</div></details>` : ""}
       ${!r.newItems.length && !r.found.length && !d ? `<div class="empty">没找到明确的事项或回复。可以用下面的手动添加。</div>` : ""}
@@ -535,7 +536,7 @@ const statTiles = (label, rows) => { const cnt = l => rows.filter(r => r.sm.item
   return `<div class="tiles">
     <div class="tile"><div class="n">${rows.length}</div><div class="l">${label}</div></div>
     <div class="tile"><div class="n" style="color:var(--red)">${cnt("red")}</div><div class="l">逾期</div></div>
-    <div class="tile"><div class="n" style="color:var(--amber)">${cnt("yellow")}</div><div class="l">临期</div></div>
+    <div class="tile"><div class="n" style="color:#F2C200">${cnt("yellow")}</div><div class="l">临期</div></div>
     <div class="tile"><div class="n" style="color:var(--green)">${cnt("green")}</div><div class="l">待办</div></div></div>`; };
 
 function bulkCard(){
@@ -812,11 +813,13 @@ async function act(name, ds, el){
       if (miss >= 0){ const box = document.querySelector(`[data-res="${miss}"][data-f="${r.newItems[miss].due ? "what" : "due"}"]`);      // 直接跳到没填的那一格
         if (box){ box.scrollIntoView({block: "center"}); box.focus(); box.style.borderColor = "var(--red)"; }
         return toast("这一条还没填日期：填上，或者取消勾选"); }
+      const nod = r.found.findIndex((u, i) => !cp.offF[i] && u.kind === "due" && !u.due);
+      if (nod >= 0){ const box = document.querySelector(`[data-fd="${nod}"]`); if (box){ box.scrollIntoView({block: "center"}); box.focus(); box.style.borderColor = "var(--red)"; } return toast("新的截止日还没填：填上，或者取消勾选"); }
       const d = r.doc && !cp.offD ? r.doc : null;
       if (d && !d.school.trim()) return toast("请填学校名");
       if (on.length) await api("additems", {student: sid, items: on.map(u => ({what: u.what, owner: u.owner, due: u.due, school: u.school, quote: u.quote})), from: d ? "AI 识别学校来信" : cp.imgs.length ? "AI 整理笔记/聊天/图片" : "AI 整理笔记/聊天"}, `${on.length} 条事项`);
       if (d) await api("outcome", {student: sid, school: d.school.trim(), kind: d.type, result: d.result, program: d.program, conditions: d.conditions.filter((c, i) => !cp.offC[i]).map(c => ({text: c.text, due: c.due})), quote: d.quote}, `${d.school} ${d.result || DOCNAME[d.type]}`);
-      if (fd.length) await api("found", {student: sid, found: fd});
+      if (fd.length) await api("found", {student: sid, found: fd}, fd.length === 1 && fd[0].kind !== "note" ? ({due: "改截止日", cancel: "取消", done: "完成", replied: "家长回复"})[fd[0].kind] + " " + (itemById(fd[0].item) || {}).what : undefined);
       cp.res = null; cp.text = ""; cp.imgs = []; render(); return toast("已写入"); }
     case "vary": S.v[ds.key] = (S.v[ds.key] || 0) + 1; return render();
     case "toggleadd": S.addOpen = !S.addOpen; S.add = blankAdd(); return render();
@@ -925,6 +928,7 @@ function onField(e, final){
     if (ds.k === "deadline" || ds.k === "croundIn") S.add.key = ds.k === "croundIn" ? "" : S.add.key;
     if (final && (ds.r !== undefined || ds.k === "region" || ds.k === "pastDone")) render(); return; }
   if (ds.step !== undefined){ const s = S.add.steps[+ds.step]; s[ds.f] = v; if (ds.f === "what") s.custom = true; if (ds.f === "due") s.edited = true; if (final && (ds.f === "due" || ds.f === "on")) render(); return; }
+  if (ds.fd !== undefined){ S.cap.res.found[+ds.fd].due = v; return; }
   if (ds.res !== undefined){ S.cap.res.newItems[+ds.res][ds.f] = v; return; }
   if (ds.doc !== undefined){ S.cap.res.doc[ds.doc] = v; if (final && ds.doc === "result") render(); return; }
   if (ds.row !== undefined){ S.cap.rows[+ds.row][ds.f] = v; return; }

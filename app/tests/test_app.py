@@ -291,3 +291,15 @@ def test_cancel_item_keeps_it_struck_and_logged(setup):
     assert not it["cancelled"] and not it["done"]
     st = act(wang, "cancelitem", item=iid, reason="学校说不需要")
     assert next(i for i in st["items"] if i["id"] == iid)["cancelled"] and "学校说不需要" in st["logs"][0]["act"]
+
+
+def test_found_due_changes_deadline_and_logs(setup):
+    a, wang, sid = setup
+    st = act(wang, "additems", student=sid, items=[{"what": "交港大成绩单", "owner": "学校", "due": "2099-11-18"}])
+    iid = next(i["id"] for i in st["items"] if i["what"] == "交港大成绩单")
+    st = act(wang, "found", student=sid, found=[{"kind": "due", "item": iid, "due": "2099-11-25", "quote": "港大成绩单推迟到下周再交"}])
+    assert next(i for i in st["items"] if i["id"] == iid)["due"] == "2099-11-25"
+    log = st["logs"][0]
+    assert log["src"] == "改截止日" and "11月18日 改为 11月25日" in log["act"] and "推迟到下周" in log["act"]
+    st = act(wang, "undo", log=log["id"])
+    assert next(i for i in st["items"] if i["id"] == iid)["due"] == "2099-11-18"

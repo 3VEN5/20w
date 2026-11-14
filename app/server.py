@@ -314,6 +314,12 @@ def a_found(c, b):
             c.con.execute("UPDATE item SET replied = ?, reply_text = ? WHERE id = ?", (d, txt(f.get("text"), "原话", 300, required=False) or None, it["id"]))
             c.log(s["id"], "微信回复", f"家长 {md(d)} 回复：“{q}”（从粘贴的聊天识别，{c.u['name']}确认）", who=s["parent"],
                   undo={"t": "replied", "id": it["id"], "old": [it["replied"], it["reply_text"]]})
+        elif f.get("kind") == "due" and not it["done"]:
+            new = date(f.get("due"), "新截止日")
+            if new != it["due"]:
+                c.con.execute("UPDATE item SET due = ? WHERE id = ?", (new, it["id"]))
+                c.log(s["id"], "改截止日", f"「{it['what']}」截止日从 {md(it['due'])} 改为 {md(new)}：“{q}”（从录入的内容识别，{c.u['name']}确认）", who=c.u["name"],
+                      undo={"t": "due", "id": it["id"], "old": it["due"]})
         elif f.get("kind") == "cancel" and not it["done"]:
             c.con.execute("UPDATE item SET done = ?, cancelled = ? WHERE id = ?", (c.today, c.today, it["id"]))
             c.log(s["id"], "取消事项", f"取消「{it['what']}」（原截止 {md(it['due'])}）：“{q}”（从录入的内容识别，{c.u['name']}确认）", who=c.u["name"], undo={"t": "cancel", "id": it["id"]})

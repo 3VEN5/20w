@@ -44,6 +44,7 @@ SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一�
   - 家长或学生对某个已有事项表示知道了、同意、会去办：kind 写 "replied"，item 写那个事项的 id。
   - 某个已有事项已经办完：kind 写 "done"，item 写那个事项的 id。
   - 顾问、家长或学校说某个已有事项不用做了、取消了、不需要了（比如“不用补交成绩单了”“这所不申了，申请费不用付”）：kind 写 "cancel"，item 写那个事项的 id。只是推迟、改时间不算取消。
+  - 某个已有事项的截止时间变了（推迟、提前、改到某天，比如“成绩单推迟到下周五再交”“学校把推荐信截止延到 12 月 1 号”）：kind 写 "due"，item 写那个事项的 id，due 写新的截止日（YYYY-MM-DD，按“今天”推算；只说“晚点”“过几天”算不出具体哪天就写 ""）。
   - 家长的回复和任何已有事项都对不上，但值得留个记录（比如“收到，谢谢老师”）：kind 写 "note"，item 写 null。
 三、学校来信 doc：材料是学校发给学生的正式通知时才填，否则 doc 写 null。
   - type 只能是：offer（录取通知）、补材料、面试、拒信、候补、其他。
@@ -75,7 +76,7 @@ SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一�
 9. 只输出一个 JSON 对象。不要输出解释，不要用 ``` 包起来。没有内容的数组写 []。
 
 【输出格式】
-{"transcript":"","doc":null 或 {"type":"","school":"","program":"","result":"","conditions":[{"text":"","due":"","quote":""}],"quote":""},"newItems":[{"what":"","owner":"","due":"","school":"","quote":""}],"found":[{"kind":"replied 或 done 或 cancel 或 note","item":"已有事项的 id，note 时写 null","date":"YYYY-MM-DD","text":"","quote":""}]}
+{"transcript":"","doc":null 或 {"type":"","school":"","program":"","result":"","conditions":[{"text":"","due":"","quote":""}],"quote":""},"newItems":[{"what":"","owner":"","due":"","school":"","quote":""}],"found":[{"kind":"replied 或 done 或 cancel 或 due 或 note","item":"已有事项的 id，note 时写 null","date":"YYYY-MM-DD","due":"只有 kind 是 due 时写新截止日","text":"","quote":""}]}
 
 【例子一：聊天记录】
 输入：
@@ -185,11 +186,12 @@ def check(out, text, open_items):
         q, kind, item = str(x.get("quote") or ""), x.get("kind"), x.get("item")
         if isinstance(item, str) and item.isdigit():
             item = int(item)                                   # 有的模型把 id 写成字符串
-        if kind not in ("replied", "done", "cancel", "note") or not q or _norm(q) not in src or (kind != "note" and item not in ids):
+        if kind not in ("replied", "done", "cancel", "due", "note") or not q or _norm(q) not in src or (kind != "note" and item not in ids):
             dropped += 1
             continue
         found.append({"kind": kind, "item": None if kind == "note" else item, "date": x.get("date") if _date_ok(x.get("date")) else "",
-                      "text": str(x.get("text") or q)[:300], "quote": q[:300]})
+                      "text": str(x.get("text") or q)[:300], "quote": q[:300],
+                      **({"due": x.get("due") if _date_ok(x.get("due")) else ""} if kind == "due" else {})})
     doc, d = None, out.get("doc")
     if isinstance(d, dict) and d.get("type") in DOC_TYPES and str(d.get("school") or "").strip():
         q = str(d.get("quote") or "")
