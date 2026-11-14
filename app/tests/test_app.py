@@ -263,3 +263,15 @@ def test_offer_doc_check_and_outcome(setup):
     assert "有条件录取" in st["logs"][0]["act"] and "8月17日前" in st["logs"][0]["act"] and st["logs"][0]["src"] == "学校来信"
     st = act(wang, "undo", log=st["logs"][0]["id"])
     assert not st["outcomes"]
+
+
+def test_addschool_backfill_marks_past_steps_done(setup):
+    a, wang, sid = setup
+    steps = [{"what": "交 NYU 文书终稿", "owner": "学生", "due": "2020-10-18", "done": True},        # 日期已过，顾问说已办完
+             {"what": "付 NYU 申请费", "owner": "家长", "due": "2020-10-27"},                          # 日期已过但没说办完：按逾期
+             {"what": "确认 NYU 期中成绩已提交", "owner": "学校", "due": "2099-01-09", "done": True}]   # 还没到的不能记为完成
+    st = act(wang, "addschool", student=sid, school="NYU", round="ED", deadline="2020-11-01", steps=steps)
+    its = {i["what"]: i for i in st["items"] if i["school"] == "NYU"}
+    assert its["交 NYU 文书终稿"]["done"] == "2020-10-18"
+    assert not its["付 NYU 申请费"]["done"] and not its["确认 NYU 期中成绩已提交"]["done"]
+    assert "1 条日期已过" in st["logs"][0]["act"]

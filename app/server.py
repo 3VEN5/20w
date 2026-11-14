@@ -330,6 +330,9 @@ def a_addschool(c, b):
     region = txt(b.get("region"), "地区", 20, required=False) or "其他"
     rolling = rnd == "滚动录取" or bool(b.get("rolling"))
     ids = [c.add_item(s["id"], x.get("what"), x.get("owner"), x.get("due"), school, rnd, deadline, region, rolling) for x in steps[:20]]
+    was_done = [i for i, x in zip(ids, steps[:20]) if x.get("done") and x["due"] < c.today]      # 补录：加学校时日期已过、顾问说已办完的
+    for i in was_done:
+        c.con.execute("UPDATE item SET done = due WHERE id = ?", (i,))
     if db_deadline and db_deadline != deadline:
         dl = f"日期库是 {db_deadline}，{c.u['name']}改为 {deadline}" + (f"（{reason}）" if reason else "")
     elif db_deadline:
@@ -340,7 +343,8 @@ def a_addschool(c, b):
         dl = f"截止日 {deadline}，{c.u['name']}自填"
     edited = [x for x in steps if x.get("edited")]
     c.log(s["id"], "加学校", f"加入 {school}（{region}，{rnd}），{dl}{'，来源：' + source if source else ''}；写入 {len(ids)} 条事项："
-          + "；".join(f"{x['what']} {md(x['due'])}" for x in steps[:20]) + (f"。其中 {len(edited)} 条的截止日由顾问改过" if edited else ""),
+          + "；".join(f"{x['what']} {md(x['due'])}" for x in steps[:20]) + (f"。其中 {len(edited)} 条的截止日由顾问改过" if edited else "")
+          + (f"。其中 {len(was_done)} 条日期已过，{c.u['name']}确认此前已办完，直接记为完成" if was_done else ""),
           undo={"t": "items", "ids": ids})
     if b.get("remember") and not db_deadline and not rolling:
         c.con.execute("INSERT OR REPLACE INTO custom_school (agency_id, school, round, date, by, on_date, src, region) VALUES (?,?,?,?,?,?,?,?)",
