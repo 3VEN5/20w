@@ -7,6 +7,7 @@
 | 地区 | 学校 | 方式 |
 |---|---|---|
 | 美国 | Common App 总表里的 1126 所 | 自动解析 PDF，得到 ED / EDII / EA / EAII / REA / RD 的截止日和申请费 |
+| 美国（Common App 以外） | UC 九个校区、MIT、Yale | 各用自己的申请系统或不在总表里。日期写在 `manual_deadlines.csv`，按官网人工核实 |
 | 英国 | 牛津、剑桥、帝国理工、UCL、LSE、爱丁堡、KCL、曼彻斯特、布里斯托、华威 | 都走 UCAS，日期统一。日期写在 `manual_deadlines.csv`，程序每周监控 UCAS 截止日页和帝国理工截止日页 |
 | 香港 | 港大、中大、科大、理工、城大、浸会、岭南、教大 | 日期从各校官网读出后写在 `manual_deadlines.csv`，程序每周监控各校页面 |
 | 澳洲 | 悉尼、UNSW、ANU、昆士兰、西澳有日期；墨尔本、Monash、Adelaide 是滚动录取，没有固定截止日 | 同上 |
@@ -55,7 +56,7 @@ python crawler.py
 
 1. **GitHub Actions（推荐）**：仓库根目录的 `.github/workflows/crawl.yml` 会在每周一北京时间早上 8 点自动跑，有变化就提交。有需要人工核实的变化时，这次运行会显示失败，GitHub 会发邮件。
 2. **自己的电脑或服务器**：Mac / Linux 用 `crontab -e` 加一行
-   `0 8 * * 1 cd /路径/deadline-crawler && python3 crawler.py`
+   `0 8 * * 1 cd /路径/爬虫 && python3 crawler.py`
 
 每周一次就够了。Common App 总表一个申请季只改几次，抓得太勤没有意义，也不礼貌。
 
@@ -72,3 +73,12 @@ python crawler.py
 - 解析靠的是 PDF 里每个字的位置。Common App 如果改了版式，程序会发现解析出的条数太少，保留旧数据并提醒，不会写入错的日期。
 - 截止时间是学校当地时间，换成北京时间可能是第二天，这一步还没做。
 - 专业级的截止日期（部分港校、加拿大学校）不在范围内。
+
+## 日期核对表（给顾问核对、补学校）
+
+`日期核对表.xlsx` 是一个单独的 Excel 文件，里面是人工核实的学校截止日、加学校时自动生成的内部时间、提醒规则。
+
+1. 把文件发给顾问。顾问直接改截止日，库里没有的学校在最后加行（填写说明在文件第一页）。
+2. 改好的文件覆盖 `爬虫/日期核对表.xlsx`，传到 main。GitHub 会自动导入、重新生成日期库；表里有看不懂的日期时会失败并写明第几行。
+3. 本地也能跑：`python sheet.py import 改好的文件.xlsx`。重新生成一份空白核对表：`python sheet.py export`。
+

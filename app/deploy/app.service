@@ -1,0 +1,14 @@
+# systemd 服务：放到 /etc/systemd/system/app.service
+[Unit]
+Description=申请进度助手
+After=network.target
+
+[Service]
+User=app
+WorkingDirectory=/srv/20w/app
+EnvironmentFile=/srv/app.env
+ExecStart=/srv/20w/app/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

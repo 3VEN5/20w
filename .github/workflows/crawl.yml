@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "0 0 * * 1"     # UTC 周一 00:00 = 北京时间周一 08:00
   workflow_dispatch:         # 也可以在 GitHub 网页的 Actions 页面手动点运行
+  push:                      # 把改好的核对表传到 main，自动导入并重新生成日期库
+    branches: [main]
+    paths: ["爬虫/日期核对表.xlsx"]
 permissions:
   contents: write
 jobs:
@@ -11,13 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: deadline-crawler
+        working-directory: 爬虫
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - name: 导入顾问改过的日期核对表（表有问题时这一步会失败，并写明第几行）
+        if: github.event_name == 'push'
+        run: python sheet.py import
       - name: 运行爬虫
         id: crawl
         run: python crawler.py || echo "need_review=true" >> "$GITHUB_OUTPUT"
@@ -25,7 +31,7 @@ jobs:
         run: |
           git config user.name "deadline-bot"
           git config user.email "deadline-bot@users.noreply.github.com"
-          git add data
+          git add data manual_deadlines.csv ../app/static/config.js ../app/artifact/config.js
           git diff --cached --quiet || git commit -m "更新截止日期库"
           git push
       - name: 有需要人工核实的变化时让本次运行显示为失败（GitHub 会发邮件提醒）

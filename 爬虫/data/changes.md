@@ -1,5 +1,23 @@
 # 变化记录
 
+## 2026-11-14T05:39Z
+
+- Common App 要求总表：文件没有变化，跳过。
+- 人工日期表：13 处变化。
+  - 新增：Massachusetts Institute of Technology｜EA｜2026-11-01
+  - 新增：Massachusetts Institute of Technology｜RD｜2027-01-04
+  - 新增：UC Berkeley｜RD｜2026-11-30
+  - 新增：UC Davis｜RD｜2026-11-30
+  - 新增：UC Irvine｜RD｜2026-11-30
+  - 新增：UC Merced｜RD｜2026-11-30
+  - 新增：UC Riverside｜RD｜2026-11-30
+  - 新增：UC San Diego｜RD｜2026-11-30
+  - 新增：UC Santa Barbara｜RD｜2026-11-30
+  - 新增：UC Santa Cruz｜RD｜2026-11-30
+  - 新增：UCLA｜RD｜2026-11-30
+  - 新增：Yale University｜RD｜2027-01-02
+  - 新增：Yale University｜REA｜2026-11-01
+
 ## 2026-11-11T15:51Z
 
 - Common App 要求总表：文件没有变化，跳过。
