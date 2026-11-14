@@ -59,6 +59,7 @@ textarea.note{background:#FFFDF6;min-height:190px}
 .upd > input[type=checkbox]{width:16px;height:16px;margin-top:5px;accent-color:var(--accent)}
 .upd .src{grid-column:2;font-size:12.5px;color:var(--muted);background:var(--sunk);border-radius:6px;padding:2px 8px}
 .upd.off .what{text-decoration:line-through;color:var(--muted)}
+.outs{margin:6px 0 4px 22px;padding:8px 12px;background:var(--sunk);border-radius:8px;font-size:13.5px} .outs ul{margin:4px 0 0;padding-left:18px} .outs > div + div{margin-top:8px}
 .thinking{display:flex;gap:10px;align-items:center;color:var(--muted);padding:30px 0;justify-content:center}
 .thinking i{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:b 1s infinite}
 .thinking i:nth-child(2){animation-delay:.15s}.thinking i:nth-child(3){animation-delay:.3s}
@@ -155,7 +156,7 @@ function blankRow(){ return {what:"", owner:"家长", due:""}; }
 function fresh(){
   return { role: D.me.role === "owner" ? "o" : "c", tab:{c:"overview", o:"board", s:"settings"}, pick:null, gen:null, undo:null, add:blankAdd(),
            filter:"全部", lf:{consultant:"全部", student:"全部"}, open:null, viewAs:null, sub:"schools", openSchool:null, addOpen:false, v:{}, tf:"全部", fold:{}, bulk:{open:false, text:"", prev:null},
-           cap:{student:null, text:"", imgs:[], target:null, busy:false, res:null, off:{}, offF:{}, rows:[blankRow()]}, newStu:false };
+           cap:{student:null, text:"", imgs:[], target:null, busy:false, res:null, off:{}, offF:{}, offC:{}, offD:false, rows:[blankRow()]}, newStu:false };
 }
 
 /* ---------- 规则 ---------- */
@@ -277,11 +278,16 @@ function addState(){      // 根据当前选择算出：学校截止日（预填
   }
   return {hit:null, ready: !!a.croundIn, rolling: a.croundIn === "滚动录取", dbDate: "", round: a.croundIn};
 }
+function planFor(school, round){   // 这所学校这个轮次的默认事项：通用的 backplan，加上只对某些轮次或地区才有的 extraSteps
+  const reg = regionOf(school), fit = b => (!b.rounds || b.rounds.includes(round)) && (!b.regions || b.regions.includes(reg));
+  return [...CF.backplan, ...(CF.extraSteps || []).filter(fit)].sort((a, b) => b.days - a.days)
+    .map(b => ({what: b.what.replace("{学校}", school).replace("{轮次}", rn(round)), owner: b.owner, days: b.days}));
+}
 function syncSteps(){     // 学校截止日变了：没被顾问改过的事项跟着重算
   const a = S.add, st = addState(), key = a.school + "|" + st.round;
   if (a.key !== key){
     a.key = key; a.deadline = st.dbDate; a.reason = "";
-    a.steps = CF.backplan.map(b => ({on:true, what: b.what.replace("{学校}", a.school).replace("{轮次}", rn(st.round)), owner:b.owner, days:b.days, due:"", edited:false}));
+    a.steps = planFor(a.school, st.round).map(b => ({on:true, ...b, due:"", edited:false}));
   }
   a.steps.forEach(s => { if (!s.edited) s.due = a.deadline && s.days !== undefined ? addDays(a.deadline, -s.days) : s.due; });
 }
@@ -293,6 +299,9 @@ function addSchoolCard(name){
     body += `<div class="pills" style="margin:10px 0 0">${Object.entries(st.hit.rounds).map(([r, d]) => `<button data-round="${esc(r)}" aria-pressed="${r === a.round}">${isRoll(d) ? (r === "滚动录取" ? "滚动录取" : esc(rn(r)) + " · 滚动录取") : esc(rn(r)) + " · " + d}</button>`).join("")}</div>`;
     const note = st.hit.kinds[a.round] === "manual" ? DL.info[a.school].notes[a.round] : "";
     if (note) body += `<div class="muted small" style="margin-top:6px">学校备注：${esc(note)}</div>`;
+    const rnote = ((CF.roundNotes || {})[a.school] || {})[a.round], rhelp = (CF.roundHelp || {})[a.round];
+    if (rnote) body += `<div class="small" style="margin-top:6px;color:var(--amber)">注意：${esc(rnote)}</div>`;
+    if (rhelp) body += `<div class="muted small" style="margin-top:4px">${esc(rhelp)}</div>`;
   } else if (a.school){
     body += `<div class="edit" style="margin-top:10px"><b>日期库里没有这所学校，请自己填</b>
       <div class="muted small">填一次就记住，以后本机构的顾问都能直接选。</div>
@@ -400,7 +409,7 @@ async function runBulk(p){
   for (const s of p.students) await api("addstudent", {name: s.name, parent: s.parent, ...(cons ? {consultant: cons} : {})});
   let n = 0;
   for (const r of p.rows){ const hit = lookup(r.school);
-    const steps = CF.backplan.map(b => ({what: b.what.replace("{学校}", r.school).replace("{轮次}", rn(r.round)), owner: b.owner, due: addDays(r.deadline, -b.days), edited: false}));
+    const steps = planFor(r.school, r.round).map(b => ({what: b.what, owner: b.owner, due: addDays(r.deadline, -b.days), edited: false}));
     await api("addschool", {student: stu(r.name).id, school: r.school, round: r.round, deadline: r.deadline, db_deadline: r.dbd || null, rolling: r.rolling, region: regionOf(r.school),
       reason: r.dbd && r.dbd !== r.deadline ? "批量导入时填写" : "", source: r.known ? srcText(r.school, r.round, hit.kinds[r.round]) : "批量导入", remember: !r.known, steps});
     toast(`正在导入 ${++n}/${p.rows.length}`); }
@@ -427,23 +436,44 @@ const stuPicker = (studs, name, extra = "") => studs.length > 8
   : `<div class="pills">${studs.map(s => `<button data-pick="${esc(s.name)}" aria-pressed="${s.name === name}"><span class="dot ${summary(s.name).light}"></span>${esc(s.name)}</button>`).join("")}${extra}</div>`;
 const noStudents = () => `<div class="card"><div class="empty">还没有学生。去「学生」页点「新学生」添加。</div></div>`;
 
+const DOCNAME = {offer:"录取通知", "补材料":"补材料通知", "面试":"面试通知", "拒信":"拒信", "候补":"候补通知", "其他":"学校来信"};
+function afterExtract(cp){      // 学校名对到库里的写法；来信里没写日期的常见后续，列出来但默认不勾
+  const r = cp.res, d = r.doc, same = (m, low) => m.toLowerCase() === low || (ALIAS[m] || []).some(x => x.toLowerCase() === low),
+    known = n => { const low = n.trim().toLowerCase();      // 先对学生已报名的学校，再对别名，最后按库里的写法
+      return schoolsOf(cp.student).map(x => x.school).find(m => same(m, low)) || Object.keys(ALIAS).find(m => same(m, low)) || resolveSchool(n); };
+  r.newItems.forEach(u => { u.school = u.school ? known(u.school) : ""; });
+  if (!d) return;
+  d.school = known(d.school);
+  r.newItems.forEach(u => { if (!u.school) u.school = d.school; });
+  const sug = (CF.afterDoc || {})[d.result || d.type] || [], n0 = r.newItems.length;
+  sug.filter(x => !r.newItems.some(u => u.what.includes(x.key))).forEach((x, i) => { r.newItems.push({what: x.what, owner: x.owner, due: "", school: d.school, quote: "", sug: true}); cp.off[n0 + i] = true; });
+}
 function capRight(idle){      // AI 整理的结果：录入页和留痕页共用
   const cp = S.cap;
   let right = "";
   if (cp.busy) right = `<div class="card"><div class="thinking"><i></i><i></i><i></i> 正在整理…</div></div>`;
   else if (cp.res){
     const r = cp.res;
+    const d = r.doc;
     right = `<div class="card">
-      ${r.newItems.length ? `<div class="head"><b>新事项</b><span class="chip">勾掉不对的，日期可改</span></div>
+      ${d ? `<div class="head"><b>学校来信</b><span class="chip ${d.result === "拒绝" ? "red" : d.result ? "green" : "acc"}">${esc(d.result || DOCNAME[d.type])}</span><span class="chip">核对后记到学校下面</span></div>
+      <div class="upd ${cp.offD ? "off" : ""}"><input type="checkbox" data-updd ${cp.offD ? "" : "checked"} aria-label="记录这封来信">
+        <div class="what grid3"><input type="text" data-doc="school" value="${esc(d.school)}" aria-label="学校"><input type="text" data-doc="program" value="${esc(d.program)}" placeholder="专业（可不填）" aria-label="专业">
+          <select data-doc="result" aria-label="结果">${["", "有条件录取", "无条件录取", "拒绝", "候补"].map(x => `<option value="${x}" ${x === d.result ? "selected" : ""}>${x || DOCNAME[d.type]}</option>`).join("")}</select></div>
+        <div class="src">原话：“${esc(d.quote)}”</div></div>
+      ${d.conditions.map((c, i) => `<div class="upd ${cp.offD || cp.offC[i] ? "off" : ""}"><input type="checkbox" data-updc="${i}" ${cp.offC[i] ? "" : "checked"} aria-label="记录这条条件">
+        <div class="what"><span class="chip acc">条件</span> ${esc(c.text)}${c.due ? `<span class="muted small">　${md(c.due)}前</span>` : ""}</div>
+        <div class="src">原话：“${esc(c.quote)}”</div></div>`).join("")}` : ""}
+      ${r.newItems.length ? `<div class="head" ${d ? 'style="margin-top:12px"' : ""}><b>新事项</b><span class="chip">勾掉不对的，日期可改</span></div>
       ${r.newItems.map((u, i) => `<div class="upd ${cp.off[i] ? "off" : ""}"><input type="checkbox" data-upd="${i}" ${cp.off[i] ? "" : "checked"}>
         <div class="what grid3"><input type="text" data-res="${i}" data-f="what" value="${esc(u.what)}">${ownerSel(u.owner, `data-res="${i}" data-f="owner"`)}<input type="date" data-res="${i}" data-f="due" value="${esc(u.due)}"></div>
-        <div class="src">原话：“${esc(u.quote)}”${u.due ? "" : ' <b class="err">原文没写日期，请填</b>'}</div></div>`).join("")}` : ""}
+        <div class="src">${u.sug ? "来信里没写日期的常见后续，需要就勾上并填日期" : `原话：“${esc(u.quote)}”`}${u.school ? `　归到：${esc(u.school)}` : ""}${u.due || u.sug ? "" : ' <b class="err">原文没写日期，请填</b>'}</div></div>`).join("")}` : ""}
       ${r.found.length ? `<div class="head" style="margin-top:12px"><b>家长回复和进展</b></div>
       ${r.found.map((u, i) => { const it = itemById(u.item); return `<label class="upd ${cp.offF[i] ? "off" : ""}"><input type="checkbox" data-updf="${i}" ${cp.offF[i] ? "" : "checked"}>
         <div class="what"><span class="chip ${u.kind === "done" ? "green" : "acc"}">${u.kind === "done" ? "已完成" : u.kind === "note" ? "家长回复，只留痕" : "家长已回复"}</span> ${esc(it ? it.what : u.text)}</div>
         <div class="src">原话：“${esc(u.quote)}”</div></label>`; }).join("")}` : ""}
       ${r.transcript ? `<details class="small" style="margin-top:10px"><summary>图片里识别出的文字（请对照图片核对，原话都从这里来）</summary><div class="src" style="white-space:pre-wrap">${esc(r.transcript)}</div></details>` : ""}
-      ${!r.newItems.length && !r.found.length ? `<div class="empty">没找到明确的事项或回复。可以用下面的手动添加。</div>` : ""}
+      ${!r.newItems.length && !r.found.length && !d ? `<div class="empty">没找到明确的事项或回复。可以用下面的手动添加。</div>` : ""}
       ${r.dropped ? `<div class="muted small">另有 ${r.dropped} 条因为原话对不上原文，已自动丢掉。</div>` : ""}
       ${r.newItems.length || r.found.length ? `<div class="row"><button class="btn" data-act="confirmcap">确认，写入</button><button class="btn ghost" data-act="clearcap">放弃</button><span class="muted small">不确认不会写入</span></div>` : `<div class="row"><button class="linkbtn" data-act="clearcap">关闭</button></div>`}</div>`;
   } else right = idle;
@@ -504,10 +534,10 @@ capture(){
   const text = logs.map(l => `${md(l.date)} ${l.time}｜${l.who}｜${l.src}｜${l.act}${l.undone ? "（已撤销）" : ""}`).join("\n");
   return `${stuPicker(studs, name)}
   <div class="two"><div>
-    ${D.ai ? `<div class="card"><div class="head"><b>${esc(name)}：贴笔记、聊天、家长回复${D.aiImages ? "或截图" : ""}</b></div>
-      <textarea class="note" data-k2="text" placeholder="比如：托福送分还没下单，得让家长这周把 30 美元付了，最晚 22 号。${D.aiImages ? "也可以直接把微信截图粘贴到这里。" : ""}">${esc(cp.text)}</textarea>
+    ${D.ai ? `<div class="card"><div class="head"><b>${esc(name)}：贴笔记、聊天、家长回复、学校邮件或 offer</b></div>
+      <textarea class="note" data-k2="text" placeholder="比如：托福送分还没下单，得让家长这周把 30 美元付了，最晚 22 号。学校发来的 offer、补材料邮件、面试通知也可以整段贴进来，${D.aiImages ? "或者加截图、PDF，" : "或者加 PDF，"}系统会读出条件和时间。">${esc(cp.text)}</textarea>
       ${cp.imgs.length ? `<div class="thumbs">${cp.imgs.map((m, i) => `<span class="thumb"><img src="${m.url}" alt="图片 ${i + 1}"><button class="x" data-act="rmimg" data-i="${i}" aria-label="去掉这张图片">×</button></span>`).join("")}</div>` : ""}
-      <div class="row"><button class="btn" data-act="organize" ${cp.busy ? "disabled" : ""}>AI 整理</button>${D.aiImages ? `<label class="btn ghost filebtn">加截图<input type="file" accept="image/*" multiple data-capimg hidden></label>` : ""}${DICT ? `<button class="btn ghost" id="micbtn" data-act="mic">${MIC_ON ? "停止说话" : "说一段"}</button>` : ""}<span class="muted small">确认后写入并留痕，原文不保存，不处理文书内容</span></div></div>` : ""}
+      <div class="row"><button class="btn" data-act="organize" ${cp.busy ? "disabled" : ""}>AI 整理</button><label class="btn ghost filebtn">${D.aiImages ? "加截图或 PDF" : "加 PDF"}<input type="file" accept="${D.aiImages ? "image/*," : ""}application/pdf,.pdf" multiple data-capimg hidden></label>${DICT ? `<button class="btn ghost" id="micbtn" data-act="mic">${MIC_ON ? "停止说话" : "说一段"}</button>` : ""}<span class="muted small">确认后写入并留痕，原文不保存，不处理文书内容</span></div></div>` : ""}
     ${capRight("")}
     <details class="card fold" data-fold="manual" ${S.fold.manual ?? !D.ai ? "open" : ""}><summary>手动添加事项</summary>
       ${cp.rows.map((r, i) => `<div class="grid3" style="margin-bottom:6px"><input type="text" data-row="${i}" data-f="what" value="${esc(r.what)}" placeholder="事项，比如：付雅思送分费">${ownerSel(r.owner, `data-row="${i}" data-f="owner"`)}<input type="date" data-row="${i}" data-f="due" value="${esc(r.due)}"></div>`).join("")}
@@ -550,10 +580,13 @@ student(){
   const itemTable = (its, grouped) => `<table><tr><th></th><th>事项</th><th>负责</th><th>截止</th><th>状态</th></tr>
       ${its.map(it => `<tr class="pick" data-act="openitem" data-id="${it.id}"><td class="ck">${it.done ? `<span class="ckb on" aria-label="已完成">✓</span>` : `<button class="ckb" data-act="done" data-id="${it.id}" aria-label="标为已完成" title="标为已完成"></button>`}</td><td>${esc(grouped ? shortWhat(it) : it.what)}</td><td class="nw">${esc(it.owner)}</td><td class="nw">${md(it.due)}</td><td class="nw">${status(it)}</td></tr>${S.open === it.id ? editRow(it) : ""}`).join("")}</table>`;
   const block = (key, title, meta, its) => { const open = its.filter(i => !i.done).sort((a,b) => diff(a.due, b.due)), on = S.openSchool === key, isSchool = key !== "__other";
+    const outs = isSchool ? (D.outcomes || []).filter(o => o.student === name && o.school === key) : [], lastRes = [...outs].reverse().find(o => o.result);
     const lt = open.length ? open.map(light).sort((a,b) => rank[a] - rank[b])[0] : "green";
     return `<div class="sch"><button class="schrow" data-openschool="${esc(key)}" aria-expanded="${on}"><span class="dot ${lt}"></span><b>${esc(title)}</b>
-        ${meta ? `<span class="muted small">${meta}</span>` : ""}<span class="chip ${open.length ? "" : "green"}">${its.length - open.length}/${its.length} 完成</span>
+        ${meta ? `<span class="muted small">${meta}</span>` : ""}${lastRes ? `<span class="chip ${lastRes.result === "拒绝" ? "red" : lastRes.result === "候补" ? "yellow" : "green"}">${esc(lastRes.result)}</span>` : ""}<span class="chip ${open.length ? "" : "green"}">${its.length - open.length}/${its.length} 完成</span>
         <span class="muted small nx">${open.length ? "下一件：" + esc(isSchool ? shortWhat(open[0]) : open[0].what) + "，" + md(open[0].due) : "全部完成"}</span></button>
+      ${on && outs.length ? `<div class="outs">${outs.map(o => `<div><b>${esc(o.result || DOCNAME[o.kind])}</b>${o.program ? `　${esc(o.program)}` : ""}<span class="muted small">　${md(o.date)}记录</span>
+          ${o.conditions.length ? `<ul>${o.conditions.map(c => `<li>${esc(c.text)}${c.due ? `<span class="muted small">　${md(c.due)}前</span>` : ""}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>` : ""}
       ${on ? itemTable(its, isSchool) + (isSchool ? `<div class="row" style="margin:6px 0 10px"><button class="linkbtn" data-act="removeschool" data-school="${esc(key)}" data-s="${esc(name)}">不申请这所学校了，整所移除</button></div>` : "") : ""}</div>`; };
   const regions = [...REGIONS, ...new Set(sch.map(s => s.region).filter(r => !REGIONS.includes(r)))].filter(r => sch.some(s => s.region === r));
   const tabs = [["schools", `报名学校 ${sch.length}`], ["items", `全部事项 ${all.filter(i => !i.done).length}`], ["send", "发给家长"]];
@@ -728,13 +761,16 @@ async function act(name, ds, el){
       await api("forget", {school: S.add.school}); S.add = {...blankAdd(), school: S.add.school}; return render();
     case "organize": { const cp = S.cap; if (!cp.text.trim() && !cp.imgs.length) return toast("先贴一段文字或加一张图片");
       cp.busy = true; cp.res = null; render();
-      try { cp.res = await extract(stu(cp.student).id, cp.text, cp.imgs.map(m => m.blob)); cp.off = {}; cp.offF = {}; }
+      try { cp.res = await extract(stu(cp.student).id, cp.text, cp.imgs.map(m => m.blob)); cp.off = {}; cp.offF = {}; cp.offC = {}; cp.offD = false; afterExtract(cp); }
       finally { cp.busy = false; render(); } return; }
     case "clearcap": S.cap.res = null; return render();
     case "confirmcap": { const cp = S.cap, r = cp.res, sid = stu(cp.student).id;
       const on = r.newItems.filter((u, i) => !cp.off[i]), fd = r.found.filter((u, i) => !cp.offF[i]);
       if (on.some(u => !u.due || !u.what.trim())) return toast("每条事项都要有截止日");
-      if (on.length) await api("additems", {student: sid, items: on, from: cp.imgs.length ? "AI 整理笔记/聊天/图片" : "AI 整理笔记/聊天"}, `${on.length} 条事项`);
+      const d = r.doc && !cp.offD ? r.doc : null;
+      if (d && !d.school.trim()) return toast("请填学校名");
+      if (on.length) await api("additems", {student: sid, items: on.map(u => ({what: u.what, owner: u.owner, due: u.due, school: u.school, quote: u.quote})), from: d ? "AI 识别学校来信" : cp.imgs.length ? "AI 整理笔记/聊天/图片" : "AI 整理笔记/聊天"}, `${on.length} 条事项`);
+      if (d) await api("outcome", {student: sid, school: d.school.trim(), kind: d.type, result: d.result, program: d.program, conditions: d.conditions.filter((c, i) => !cp.offC[i]).map(c => ({text: c.text, due: c.due})), quote: d.quote}, `${d.school} ${d.result || DOCNAME[d.type]}`);
       if (fd.length) await api("found", {student: sid, found: fd});
       cp.res = null; cp.text = ""; cp.imgs = []; render(); return toast("已写入"); }
     case "vary": S.v[ds.key] = (S.v[ds.key] || 0) + 1; return render();
@@ -789,8 +825,36 @@ async function shrink(file){
   const url = c.toDataURL("image/jpeg", 0.85), blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
   return {url, blob};
 }
+const isPdf = f => f && (f.type === "application/pdf" || /\.pdf$/i.test(f.name || ""));
+let PDFJS = null;
+async function readPdf(file){      // PDF 在浏览器里读：有文字层就取文字，扫描件就把前几页转成图片。文件本身不上传、不保存
+  if (!PDFJS){ PDFJS = await import("./pdf.min.js"); PDFJS.GlobalWorkerOptions.workerSrc = new URL("./pdf.worker.min.js", location.href).href; }
+  const doc = await PDFJS.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise, n = Math.min(doc.numPages, 6);
+  let text = "";
+  for (let i = 1; i <= n; i++){ const tc = await (await doc.getPage(i)).getTextContent(); let last = null;
+    for (const it of tc.items){ if (last !== null && Math.abs(it.transform[5] - last) > 2) text += "\n"; text += it.str; last = it.transform[5]; }
+    text += "\n"; }
+  if (text.replace(/\s/g, "").length >= 60) return {text: text.replace(/\n{3,}/g, "\n\n").trim().slice(0, 9000)};
+  const imgs = [];
+  for (let i = 1; i <= Math.min(n, 4); i++){ const pg = await doc.getPage(i), v0 = pg.getViewport({scale: 1}), vp = pg.getViewport({scale: Math.min(2, 1600 / Math.max(v0.width, v0.height))});
+    const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    await pg.render({canvasContext: c.getContext("2d"), viewport: vp}).promise;
+    imgs.push({url: c.toDataURL("image/jpeg", 0.85), blob: await new Promise(r => c.toBlob(r, "image/jpeg", 0.85))}); }
+  return {imgs};
+}
+async function addPdfs(files){
+  const ta = document.querySelector('[data-k2="text"]'); if (ta) S.cap.text = ta.value;
+  for (const f of files){
+    try { const r = await readPdf(f);
+      if (r.text) S.cap.text = (S.cap.text.trim() ? S.cap.text.trim() + "\n\n" : "") + r.text;
+      else if (!D.aiImages) toast("这份 PDF 是扫描件，读不出文字。请把内容打字或复制进来");
+      else { const room = 4 - S.cap.imgs.length; if (room <= 0) toast("一次最多 4 张图片"); else { S.cap.imgs.push(...r.imgs.slice(0, room)); if (r.imgs.length > room) toast("只取了前几页"); } } }
+    catch (e){ toast("这份 PDF 打不开，可以把内容复制进来"); } }
+  render();
+}
 async function addImgs(files){
-  files = files.filter(f => f && /^image\//.test(f.type));
+  const pdfs = files.filter(isPdf); if (pdfs.length) await addPdfs(pdfs);
+  files = files.filter(f => f && /^image\//.test(f.type) && D.aiImages);
   if (!files.length) return;
   const room = 4 - S.cap.imgs.length;
   if (room <= 0) return toast("一次最多 4 张图片");
@@ -817,12 +881,15 @@ function onField(e, final){
     if (final && ds.r !== undefined) render(); return; }
   if (ds.step !== undefined){ const s = S.add.steps[+ds.step]; s[ds.f] = v; if (ds.f === "what") s.custom = true; if (ds.f === "due") s.edited = true; if (final && (ds.f === "due" || ds.f === "on")) render(); return; }
   if (ds.res !== undefined){ S.cap.res.newItems[+ds.res][ds.f] = v; return; }
+  if (ds.doc !== undefined){ S.cap.res.doc[ds.doc] = v; if (final && ds.doc === "result") render(); return; }
   if (ds.row !== undefined){ S.cap.rows[+ds.row][ds.f] = v; return; }
   if (ds.pickstu !== undefined){ if (final) pickStudent(t.value); return; }
   if (ds.k2 !== undefined){ S.cap[ds.k2] = v; return; }
   if (!final) return;
   if (ds.upd !== undefined){ S.cap.off[ds.upd] = !t.checked; render(); }
   if (ds.updf !== undefined){ S.cap.offF[ds.updf] = !t.checked; render(); }
+  if (ds.updc !== undefined){ S.cap.offC[ds.updc] = !t.checked; render(); }
+  if (ds.updd !== undefined){ S.cap.offD = !t.checked; render(); }
   if (t.id === "school" && t.isConnected){ S.add = {...blankAdd(), school: resolveSchool(t.value)}; render(); }
   if (ds.lf){ S.lf[ds.lf] = t.value; if (ds.lf === "consultant") S.lf.student = "全部"; render(); }
 }

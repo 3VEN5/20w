@@ -132,6 +132,16 @@ def config_js():
     return FileResponse(STATIC / "config.js", media_type="text/javascript")
 
 
+@app.get("/pdf.min.js")
+def pdf_js():
+    return FileResponse(STATIC / "pdf.min.js", media_type="text/javascript", headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/pdf.worker.min.js")
+def pdf_worker_js():
+    return FileResponse(STATIC / "pdf.worker.min.js", media_type="text/javascript", headers={"Cache-Control": "public, max-age=604800"})
+
+
 @app.get("/deadlines.js")
 def deadlines_js(u=Depends(current_user)):
     if not DEADLINES_JS.exists():
@@ -156,6 +166,7 @@ def state(u):
         for r in con.execute("SELECT * FROM custom_school WHERE agency_id = ? ORDER BY school", (aid,)):
             m = mem.setdefault(r["school"], {"d": {}, "by": r["by"], "on": r["on_date"], "src": r["src"], "region": r["region"]})
             m["d"][r["round"]] = r["date"]
+        outcomes = [dict(r) for r in con.execute("SELECT * FROM outcome WHERE agency_id = ? AND deleted = 0 ORDER BY id", (aid,))]
     cons_of = {s["id"]: uname.get(s["consultant_id"], "") for s in studs}
     undo_after = (db.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M")
     return {
@@ -170,6 +181,8 @@ def state(u):
                   "student": sname.get(l["student_id"], ""), "consultant": cons_of.get(l["student_id"], ""), "undone": bool(l["undone"]),
                   "canUndo": bool(l["undo"]) and not l["undone"] and l["user_id"] == u["id"] and l["at"] >= undo_after} for l in logs],
         "memory": mem,
+        "outcomes": [{"id": o["id"], "student": sname[o["student_id"]], "school": o["school"], "kind": o["kind"], "result": o["result"], "program": o["program"],
+                      "conditions": json.loads(o["conditions"]), "date": o["on_date"], "by": o["by"]} for o in outcomes if o["student_id"] in sname],
     }
 
 
@@ -258,11 +271,31 @@ def a_sent(c, b):
 def a_additems(c, b):
     s = c.student(b.get("student"))
     items = b.get("items") or bad("没有要写入的事项")
-    ids = [c.add_item(s["id"], x.get("what"), x.get("owner"), x.get("due")) for x in items[:50]]
+    ids = [c.add_item(s["id"], x.get("what"), x.get("owner"), x.get("due"), school=txt(x.get("school"), "学校", 100, required=False) or None) for x in items[:50]]
     label = txt(b.get("from") or "手动添加", "来源", 30)
     quotes = [x.get("quote") for x in items if x.get("quote")]
     c.log(s["id"], "录入", f"{label}，确认 {len(ids)} 条事项：" + "；".join(f"{x['what']}（{x['owner']}，{md(x['due'])}）" for x in items[:50])
           + (f"。原话：" + " / ".join(f"“{q[:80]}”" for q in quotes) if quotes else ""), undo={"t": "items", "ids": ids})
+
+
+DOC_KINDS = {"offer": "录取通知", "补材料": "补材料通知", "面试": "面试通知", "拒信": "拒信", "候补": "候补通知", "其他": "学校来信"}
+
+
+def a_outcome(c, b):
+    """学校来信：录取结果和条件。顾问核对后才记。只存结果、条件和原话，不存原件。"""
+    s = c.student(b.get("student"))
+    school, kind = txt(b.get("school"), "学校", 100), b.get("kind")
+    if kind not in DOC_KINDS:
+        bad("来信类型不对")
+    result = b.get("result") if b.get("result") in ai.DOC_RESULTS else ""
+    program = txt(b.get("program"), "专业", 120, required=False)
+    conds = [{"text": txt(x.get("text"), "条件", 200), "due": date(x["due"], "条件截止日") if x.get("due") else ""} for x in (b.get("conditions") or [])[:10]]
+    quote = txt(b.get("quote"), "原话", 300, required=False)
+    oid = c.con.execute("INSERT INTO outcome (agency_id, student_id, school, kind, result, program, conditions, on_date, by) VALUES (?,?,?,?,?,?,?,?,?)",
+                        (c.aid, s["id"], school, kind, result, program, json.dumps(conds, ensure_ascii=False), c.today, c.u["name"])).lastrowid
+    c.log(s["id"], "学校来信", f"{school} {DOC_KINDS[kind]}" + (f"：{result}" if result else "") + (f"，{program}" if program else "")
+          + ("。条件：" + "；".join(x["text"] + (f"（{md(x['due'])}前）" if x["due"] else "") for x in conds) if conds else "")
+          + (f"。原话：“{quote[:120]}”" if quote else "") + f"（{c.u['name']}核对后记录）", who=school, undo={"t": "outcome", "id": oid})
 
 
 def a_found(c, b):
@@ -387,6 +420,8 @@ def a_undo(c, b):
     elif t == "edit":
         o = u["old"]
         c.con.execute("UPDATE item SET what = ?, owner = ?, due = ? WHERE id = ? AND agency_id = ?", (o["what"], o["owner"], o["due"], u["id"], c.aid))
+    elif t == "outcome":
+        c.con.execute("UPDATE outcome SET deleted = 1 WHERE id = ? AND agency_id = ?", (u["id"], c.aid))
     elif t == "restore":
         c.con.executemany("UPDATE item SET deleted = 0 WHERE id = ? AND agency_id = ?", [(i, c.aid) for i in u["ids"]])
     # 留痕不删，只标成"已撤销"，老板仍然看得到
@@ -477,16 +512,17 @@ async def extract(request: Request, u=Depends(current_user)):
     for im in images:
         if not isinstance(im, str) or not re.match(r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$", im) or len(im) > 4_000_000:
             bad("图片格式不对，请换一张（jpg、png）")
-    text = txt(b.get("text"), "内容", 6000, required=not images)
+    text = txt(b.get("text"), "内容", 12000, required=not images)
     with db.connect() as con:
         s = Ctx(con, u).student(b.get("student"))
         open_items = [dict(r) for r in con.execute("SELECT id, what, owner, due FROM item WHERE student_id = ? AND deleted = 0 AND done IS NULL", (s["id"],))]
+        schools = [r[0] for r in con.execute("SELECT DISTINCT school FROM item WHERE student_id = ? AND deleted = 0 AND school IS NOT NULL", (s["id"],))]
     if not ai.enabled():
         bad("还没有配置 AI 服务，请用手动添加")
     if images and not ai.images_enabled():
         bad("还没有开通图片识别，请把文字贴进来")
     try:
-        return ai.extract(text, s["name"], s["parent"], open_items, db.today(), images)
+        return ai.extract(text, s["name"], s["parent"], open_items, db.today(), images, schools)
     except ai.AIError as e:
         bad(str(e), 502)
 

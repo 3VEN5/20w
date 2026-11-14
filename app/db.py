@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS log (
 CREATE TABLE IF NOT EXISTS custom_school (
   agency_id INTEGER NOT NULL, school TEXT NOT NULL, round TEXT NOT NULL, date TEXT NOT NULL,
   by TEXT NOT NULL, on_date TEXT NOT NULL, src TEXT NOT NULL DEFAULT '', PRIMARY KEY (agency_id, school, round));
+CREATE TABLE IF NOT EXISTS outcome (
+  id INTEGER PRIMARY KEY, agency_id INTEGER NOT NULL, student_id INTEGER NOT NULL REFERENCES student(id), school TEXT NOT NULL,
+  kind TEXT NOT NULL, result TEXT NOT NULL DEFAULT '', program TEXT NOT NULL DEFAULT '', conditions TEXT NOT NULL DEFAULT '[]',
+  on_date TEXT NOT NULL, by TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS item_student ON item(student_id);
 CREATE INDEX IF NOT EXISTS log_agency ON log(agency_id, id);
 """

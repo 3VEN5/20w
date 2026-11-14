@@ -1,4 +1,4 @@
-"""AI 整理：把顾问的笔记或粘贴的微信聊天，整理成"待确认的事项"。
+"""AI 整理：把顾问的笔记、粘贴的微信聊天、学校来信（offer、补材料、面试、拒信、候补），整理成"待确认的事项"和"录取结果与条件"。
 
 - 只抽取事项和进展，不写、不改、不翻译任何文书内容。
 - 每一条都必须带原文里的原话；程序检查原话确实出现在原文里，对不上的直接丢掉。
@@ -35,34 +35,50 @@ def images_enabled():
 
 # 提示词：系统提示词讲规则和格式（固定不变），用户消息放这一次的材料。DeepSeek、通义千问、豆包、Kimi、智谱等国内模型都能直接用。
 # 同一份提示词的说明在 提示词/信息整理提示词.md；改了这里，记得同步改 artifact/store.js。
-SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一段材料，可能是见面笔记、微信聊天记录、家长的回复、学校或考试机构的邮件，也可能是这些内容的截图或照片。
+SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一段材料，可能是见面笔记、微信聊天记录、家长的回复，也可能是学校发来的录取通知（offer）、补材料邮件、面试邀请、拒信、候补通知，或者这些内容的截图、照片、PDF 里的文字。材料可能是中文，也可能是英文。
 你的任务只有一个：把材料里和申请事项有关的信息整理成 JSON，供顾问核对后写入系统。你不直接面对家长和学生，不要寒暄，不要给建议。
 
-【要找的三类信息】
-一、新事项 newItems：材料里明确提到、但“已有事项”里没有的待办。写清做什么（what）、谁负责（owner）、最晚哪天（due）。
+【要找的四类信息】
+一、新事项 newItems：材料里明确提到、但“已有事项”里没有的待办。写清做什么（what）、谁负责（owner）、最晚哪天（due）、属于哪所学校（school，不属于某所学校就写 ""）。
 二、已有事项的进展 found：
   - 家长或学生对某个已有事项表示知道了、同意、会去办：kind 写 "replied"，item 写那个事项的 id。
   - 某个已有事项已经办完：kind 写 "done"，item 写那个事项的 id。
   - 家长的回复和任何已有事项都对不上，但值得留个记录（比如“收到，谢谢老师”）：kind 写 "note"，item 写 null。
-三、图片转写 transcript：有图片时，先把图片里和申请事项有关的文字逐字抄下来。
+三、学校来信 doc：材料是学校发给学生的正式通知时才填，否则 doc 写 null。
+  - type 只能是：offer（录取通知）、补材料、面试、拒信、候补、其他。
+  - school：学校名。“已报名学校”里有同一所学校时，照抄那里的写法；没有就照抄材料里的写法。
+  - program：专业或项目名，照抄材料，没有写 ""。
+  - result 只能是：有条件录取、无条件录取、拒绝、候补、""（不是录取结果时写 ""）。
+  - conditions：录取条件或学校提出的要求，一条写一项。text 用中文简要概括（成绩、分数、科目、证书名照抄原文，不要换算），due 是这一条要求的最晚日期，quote 是原话。
+  - quote：材料里说明这是什么通知的那句原话。
+四、图片转写 transcript：有图片时，先把图片里和申请事项有关的文字逐字抄下来。
+
+【学校来信要生成哪些新事项】
+材料里写了日期的，才生成事项；没写日期的不要自己编，系统会另外提示顾问。
+- offer：接受录取的截止日 → “接受 XX 录取”（学生）；押金、留位费、学费首付的截止日 → “付 XX 留位费”（家长）；每一条带日期的录取条件 → “达到 XX 录取条件并提交成绩”或“提交 XX 语言成绩”等（学生）；要求补交文件的截止日 → “提交 XX 最终成绩单”等（学校或学生）。开学或报到日期写成“XX 开学报到”（学生）。
+- 补材料：每一份要补的材料一条事项，按材料归谁办来定负责人（成绩单、推荐信是学校；护照、资金证明是家长；作品集、问卷是学生）。
+- 面试：有回复或预约截止日 → “预约 XX 面试时间”（学生）；有面试日期 → “参加 XX 面试”（学生）。
+- 候补：要求在某天前回复是否留在候补名单 → “回复 XX 是否留在候补名单”（学生）。
+- 拒信：不生成事项，只填 doc。
 
 【规则】
 1. owner 只能是这四个词之一：学生、家长、学校、机构。“机构”指顾问或机构自己要做的事；“学校”指学生所在中学要做的事，比如成绩单、推荐信。
-2. due 写成 YYYY-MM-DD。材料里是“22 号”“下周一”“月底”这类说法时，按“今天”的日期推算。材料里没有提到时间就写空字符串 ""，不要猜。
-3. 每一条都必须带 quote：从材料原文或你的 transcript 里一字不差复制的一小段原话，作为依据。不要改写，不要翻译，不要把两句拼成一句。找不到原话依据的内容不要输出。
+2. due 写成 YYYY-MM-DD。材料里是“22 号”“下周一”“月底”这类说法时，按“今天”的日期推算；英文日期（March 31, 2025）直接换成这个格式，年份照材料写，不要改。材料里没有提到时间就写空字符串 ""，不要猜。
+3. 每一条都必须带 quote：从材料原文或你的 transcript 里一字不差复制的一小段原话，作为依据。原文是英文就复制英文，不要翻译，不要改写，不要把两句拼成一句。找不到原话依据的内容不要输出。
 4. 不要把已有事项重复当成新事项。闲聊、没有明确动作的话，不要整理成事项。
-5. what 用简短的动宾短语，不超过 20 个字，比如“付托福送分费”“交 UCL 文书终稿”。
+5. what 用简短的动宾短语，不超过 20 个字，比如“付托福送分费”“接受港大录取”。
 6. found 里的 text 写家长或学生的原话，date 写这句话是哪天说的，材料里看不出来就写今天。
 7. 红线：不写、不改、不翻译、不评价任何文书、活动描述、推荐信的内容。材料里出现这些正文时直接跳过，transcript 里也不要抄。
 8. 有图片时，transcript 照抄图片里的文字，保留是谁说的（比如“家长：”“顾问：”），看不清的地方写 [看不清]。没有图片时 transcript 写 ""。
 9. 只输出一个 JSON 对象。不要输出解释，不要用 ``` 包起来。没有内容的数组写 []。
 
 【输出格式】
-{"transcript":"","newItems":[{"what":"","owner":"","due":"","quote":""}],"found":[{"kind":"replied 或 done 或 note","item":"已有事项的 id，note 时写 null","date":"YYYY-MM-DD","text":"","quote":""}]}
+{"transcript":"","doc":null 或 {"type":"","school":"","program":"","result":"","conditions":[{"text":"","due":"","quote":""}],"quote":""},"newItems":[{"what":"","owner":"","due":"","school":"","quote":""}],"found":[{"kind":"replied 或 done 或 note","item":"已有事项的 id，note 时写 null","date":"YYYY-MM-DD","text":"","quote":""}]}
 
-【例子】
+【例子一：聊天记录】
 输入：
 今天：2026-11-12。学生：张同学；家长称呼：张妈妈。
+已报名学校：UCLA
 已有事项（id｜事项｜负责人｜截止）：
 17｜付 UC 申请费｜家长｜2026-11-19
 材料：
@@ -73,15 +89,39 @@ SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一�
 张妈妈：行，辛苦老师
 >>>
 输出：
-{"transcript":"","newItems":[{"what":"付托福送分费","owner":"家长","due":"2026-11-22","quote":"送分要 30 美元，您 22 号前付一下"}],"found":[{"kind":"replied","item":"17","date":"2026-11-12","text":"好的，明天就付","quote":"好的，明天就付"},{"kind":"note","item":null,"date":"2026-11-12","text":"行，辛苦老师","quote":"行，辛苦老师"}]}"""
+{"transcript":"","doc":null,"newItems":[{"what":"付托福送分费","owner":"家长","due":"2026-11-22","school":"","quote":"送分要 30 美元，您 22 号前付一下"}],"found":[{"kind":"replied","item":"17","date":"2026-11-12","text":"好的，明天就付","quote":"好的，明天就付"},{"kind":"note","item":null,"date":"2026-11-12","text":"行，辛苦老师","quote":"行，辛苦老师"}]}
+
+【例子二：录取通知】
+输入：
+今天：2027-03-22。学生：陈同学；家长称呼：陈爸爸。
+已报名学校：香港大学 HKU、UCL
+已有事项（id｜事项｜负责人｜截止）：
+（没有）
+材料：
+<<<
+THE UNIVERSITY OF HONG KONG
+Offer of admission
+It is my great pleasure to offer you admission to the University of Hong Kong. This is a conditional offer with details as set out below:
+Programme 6729 - Bachelor of Science
+Start of teaching September 1, 2027
+This offer is conditional upon your obtaining the following on or before August 17, 2027:
+A*AA or better in three GCE Advanced Level subjects, including A or better in Mathematics
+If we do not hear from you by March 31, 2027, our offer will no longer be valid.
+>>>
+输出：
+{"transcript":"","doc":{"type":"offer","school":"香港大学 HKU","program":"6729 - Bachelor of Science","result":"有条件录取","conditions":[{"text":"三门 GCE A-Level 达到 A*AA 或以上，其中数学 A 或以上","due":"2027-08-17","quote":"A*AA or better in three GCE Advanced Level subjects, including A or better in Mathematics"}],"quote":"This is a conditional offer with details as set out below"},"newItems":[{"what":"接受港大录取","owner":"学生","due":"2027-03-31","school":"香港大学 HKU","quote":"If we do not hear from you by March 31, 2027, our offer will no longer be valid."},{"what":"达到港大录取条件并提交成绩","owner":"学生","due":"2027-08-17","school":"香港大学 HKU","quote":"This offer is conditional upon your obtaining the following on or before August 17, 2027"},{"what":"港大开学报到","owner":"学生","due":"2027-09-01","school":"香港大学 HKU","quote":"Start of teaching September 1, 2027"}],"found":[]}"""
 
 USER_PROMPT = """今天：{today}。学生：{student}；家长称呼：{parent}。
+已报名学校：{schools}
 已有事项（id｜事项｜负责人｜截止）：
 {items}
 材料{imgnote}：
 <<<
 {text}
 >>>"""
+
+DOC_TYPES = {"offer", "补材料", "面试", "拒信", "候补", "其他"}
+DOC_RESULTS = {"有条件录取", "无条件录取", "拒绝", "候补", ""}
 
 
 def _norm(s):
@@ -103,9 +143,9 @@ def _json(content):
     return json.loads(content[a:b + 1] if a >= 0 and b > a else content)
 
 
-def extract(text, student, parent, open_items, today, images=()):
+def extract(text, student, parent, open_items, today, images=(), schools=()):
     items = "\n".join(f"{i['id']}｜{i['what']}｜{i['owner']}｜{i['due']}" for i in open_items) or "（没有）"
-    user = (USER_PROMPT.replace("{today}", today).replace("{student}", student).replace("{parent}", parent).replace("{items}", items)
+    user = (USER_PROMPT.replace("{today}", today).replace("{student}", student).replace("{parent}", parent).replace("{items}", items).replace("{schools}", "、".join(schools) or "（还没有）")
             .replace("{imgnote}", f"（另附 {len(images)} 张图片）" if images else "").replace("{text}", text or "（没有文字，只有图片）"))
     if images:
         model, base = os.environ["AI_VISION_MODEL"], os.environ.get("AI_VISION_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
@@ -138,7 +178,7 @@ def check(out, text, open_items):
             dropped += 1
             continue
         due = x.get("due") if _date_ok(x.get("due")) else ""
-        new.append({"what": str(x["what"]).strip()[:120], "owner": x["owner"], "due": due, "quote": q[:300]})
+        new.append({"what": str(x["what"]).strip()[:120], "owner": x["owner"], "due": due, "school": str(x.get("school") or "").strip()[:100], "quote": q[:300]})
     for x in out.get("found") or []:
         q, kind, item = str(x.get("quote") or ""), x.get("kind"), x.get("item")
         if isinstance(item, str) and item.isdigit():
@@ -148,4 +188,19 @@ def check(out, text, open_items):
             continue
         found.append({"kind": kind, "item": None if kind == "note" else item, "date": x.get("date") if _date_ok(x.get("date")) else "",
                       "text": str(x.get("text") or q)[:300], "quote": q[:300]})
-    return {"newItems": new, "found": found, "dropped": dropped}
+    doc, d = None, out.get("doc")
+    if isinstance(d, dict) and d.get("type") in DOC_TYPES and str(d.get("school") or "").strip():
+        q = str(d.get("quote") or "")
+        if q and _norm(q) in src:                              # 学校来信也要有原话依据
+            conds = []
+            for x in d.get("conditions") or []:
+                cq = str((x or {}).get("quote") or "")
+                if not cq or _norm(cq) not in src or not str(x.get("text") or "").strip():
+                    dropped += 1
+                    continue
+                conds.append({"text": str(x["text"]).strip()[:200], "due": x.get("due") if _date_ok(x.get("due")) else "", "quote": cq[:300]})
+            doc = {"type": d["type"], "school": str(d["school"]).strip()[:100], "program": str(d.get("program") or "").strip()[:120],
+                   "result": d.get("result") if d.get("result") in DOC_RESULTS else "", "conditions": conds[:10], "quote": q[:300]}
+        else:
+            dropped += 1
+    return {"newItems": new, "found": found, "doc": doc, "dropped": dropped}
