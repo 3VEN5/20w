@@ -177,14 +177,74 @@ window.CFG = {
     "University of Queensland": ["昆士兰大学", "昆大", "UQ"],
     "University of Western Australia": ["西澳大学", "西澳", "UWA"],
     "Adelaide University": ["阿德莱德大学", "阿大"],
-    "香港大学 HKU": ["港大", "HKU"],
-    "香港中文大学 CUHK": ["港中文", "中大", "CUHK"],
-    "香港科技大学 HKUST": ["港科大", "科大", "HKUST"],
-    "香港理工大学 PolyU": ["港理工", "理大", "PolyU"],
-    "香港城市大学 CityU": ["港城大", "城大", "CityU"],
-    "香港浸会大学 HKBU": ["浸会", "浸大", "HKBU"],
+    "香港大学 HKU": ["港大", "HKU", "The University of Hong Kong", "University of Hong Kong"],
+    "香港中文大学 CUHK": ["港中文", "中大", "CUHK", "The Chinese University of Hong Kong"],
+    "香港科技大学 HKUST": ["港科大", "科大", "HKUST", "The Hong Kong University of Science and Technology"],
+    "香港理工大学 PolyU": ["港理工", "理大", "PolyU", "The Hong Kong Polytechnic University"],
+    "香港城市大学 CityU": ["港城大", "城大", "CityU", "City University of Hong Kong"],
+    "香港浸会大学 HKBU": ["浸会", "浸大", "HKBU", "Hong Kong Baptist University"],
     "岭南大学 Lingnan": ["岭南", "岭大"],
     "香港教育大学 EdUHK": ["教大", "港教大", "EdUHK"]
+  },
+
+  // 只对某些轮次或地区才有的默认事项。rounds、regions 不写就是都适用；days 为负数表示在学校截止日之后。
+  // 这一段不在日期核对表里，要改直接改这里。
+  extraSteps: [
+    { what: "签 {学校} ED 协议（学生、家长、学校升学老师都要签）", owner: "家长", days: 10, rounds: ["ED", "EDII"] },
+    { what: "登录 {学校} 申请系统，确认材料齐全", owner: "机构", days: -7 },
+    { what: "确认 {学校} 期中成绩已提交", owner: "学校", days: -40, rounds: ["RD"], regions: ["美国"] }
+  ],
+
+  // 识别出学校来信后，来信里没写日期的常见后续。列出来但默认不勾，顾问需要就勾上并填日期。
+  // key：来信里已经读出同类事项时不重复列（事项名包含 key 就算有了）。
+  afterDoc: {
+    "有条件录取": [
+      { key: "留位费", what: "付留位费", owner: "家长" },
+      { key: "最终成绩", what: "提交最终成绩单", owner: "学校" },
+      { key: "宿舍", what: "申请宿舍", owner: "学生" },
+      { key: "签证", what: "办理学生签证", owner: "家长" }
+    ],
+    "无条件录取": [
+      { key: "留位费", what: "付留位费", owner: "家长" },
+      { key: "宿舍", what: "申请宿舍", owner: "学生" },
+      { key: "签证", what: "办理学生签证", owner: "家长" }
+    ],
+    "候补": [
+      { key: "候补", what: "回复是否留在候补名单", owner: "学生" },
+      { key: "补充材料", what: "向学校提交补充材料或新成绩", owner: "学生" }
+    ],
+    "面试": [
+      { key: "面试", what: "参加面试", owner: "学生" }
+    ]
+  },
+
+  // 轮次说明：选中轮次时显示在下面。roundHelp 是通用的；roundNotes 是个别学校的限定，都按学校官网核实过（2026-11-14）。
+  // 学校名必须和日期库里的一字不差。
+  roundHelp: {
+    ED: "ED 是绑定录取：录取后必须入读，并撤回其他学校的申请。只能 ED 一所。",
+    EDII: "ED II 同样是绑定录取：录取后必须入读，并撤回其他学校的申请。",
+    REA: "REA 是限制性提前批：不绑定，但同时申请别的学校提前批会受限制，具体以这所学校官网为准。"
+  },
+  roundNotes: {
+    "Georgia Institute of Technology": {
+      EA: "这一轮（EA1）只给佐治亚州的学生。州外和国际学生请选 EA II。",
+      EAII: "这一轮（EA2）给佐治亚州以外的学生，包括国际学生。想评奖学金必须走提前批。"
+    },
+    "University of Southern California": {
+      ED: "2027 秋季入学起大部分专业都能 ED。舞蹈、音乐、戏剧三个学院不能 ED，只能走 RD，截止 12 月 1 日。",
+      EA: "11 月 1 日也是大部分专业评奖学金的截止日。需要作品集或试演的专业不能走提前批，截止 12 月 1 日。",
+      RD: "舞蹈、音乐、戏剧等需要作品集或试演的专业，截止是 12 月 1 日，比这里的日期早。"
+    },
+    "University of Michigan": {
+      ED: "双学位和优先录取项目不能走 ED（商科与工程联合学位除外）。助学金材料 11 月 15 日前交。",
+      RD: "音乐、戏剧、舞蹈专业只能走 RD，截止是 12 月 1 日，比这里的日期早。"
+    },
+    "Georgetown University": {
+      EA: "不绑定，但申请乔治城 EA 的同时，不能申请其他学校的 ED 或 ED II。"
+    },
+    "University of Notre Dame": {
+      REA: "可以同时申请其他学校的 EA，也可以申请 ED II；不能申请任何学校的 ED（第一轮）。"
+    }
   },
 
   roundOptions: ["ED", "ED II", "EA", "REA", "RD", "第一批", "主批", "最终批", "第一学期", "第二学期", "滚动录取"]

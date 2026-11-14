@@ -147,7 +147,7 @@ def test_ai_check_drops_unquoted():
     assert r["newItems"][1]["due"] == ""                                  # 不合法的日期清空，让顾问填
     assert r["dropped"] == 2
     assert [(f["kind"], f["item"]) for f in r["found"]] == [("replied", 1), ("note", None)]
-    assert "JSON" in ai.SYSTEM_PROMPT and "{" not in ai.USER_PROMPT.replace("{today}", "").replace("{student}", "").replace("{parent}", "").replace("{items}", "").replace("{imgnote}", "").replace("{text}", "")
+    assert "JSON" in ai.SYSTEM_PROMPT and "{" not in ai.USER_PROMPT.replace("{today}", "").replace("{student}", "").replace("{parent}", "").replace("{items}", "").replace("{imgnote}", "").replace("{text}", "").replace("{schools}", "")
 
 
 def test_pages_served(setup):
@@ -155,6 +155,7 @@ def test_pages_served(setup):
     assert "申请进度助手" in a.get("/").text
     assert a.get("/deadlines.js").status_code == 200
     assert "window.CFG" in a.get("/config.js").text
+    assert a.get("/pdf.min.js").status_code == 200 and a.get("/pdf.worker.min.js").status_code == 200
 
 
 PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -231,3 +232,33 @@ def test_edititem_and_removeschool(setup):
     assert "移除 Test College，连同 2 条事项" in st["logs"][0]["act"]
     st = act(wang, "undo", log=st["logs"][0]["id"])
     assert len([i for i in st["items"] if i.get("school") == "Test College"]) == 2
+
+
+OFFER = """THE UNIVERSITY OF HONG KONG
+Offer of admission
+This is a conditional offer with details as set out below:
+Programme 6779 - Statistical Decision Sciences
+This offer is conditional upon your obtaining the following on or before August 17, 2027:
+2A*1A or better in three GCE/International Advanced Level subjects, including A or better in Mathematics
+If we do not hear from you by March 31, 2027, our offer will no longer be valid."""
+
+
+def test_offer_doc_check_and_outcome(setup):
+    a, wang, sid = setup
+    out = {"doc": {"type": "offer", "school": "香港大学 HKU", "program": "6779 - Statistical Decision Sciences", "result": "有条件录取", "quote": "This is a conditional offer",
+                   "conditions": [{"text": "三门 A-Level 达到 2A*1A，数学 A 或以上", "due": "2027-08-17", "quote": "2A*1A or better in three GCE/International Advanced Level subjects"},
+                                  {"text": "编出来的条件", "due": "", "quote": "IELTS 7.0"}]},
+           "newItems": [{"what": "接受港大录取", "owner": "学生", "due": "2027-03-31", "school": "香港大学 HKU", "quote": "If we do not hear from you by March 31, 2027"}], "found": []}
+    r = ai.check(out, OFFER, [])
+    assert r["doc"]["result"] == "有条件录取" and len(r["doc"]["conditions"]) == 1 and r["dropped"] == 1
+    assert r["newItems"][0]["school"] == "香港大学 HKU"
+    assert ai.check({"doc": {"type": "offer", "school": "X", "quote": "原文没有"}}, OFFER, [])["doc"] is None      # 没有原话依据的来信不认
+    st = act(wang, "additems", student=sid, items=r["newItems"], **{"from": "AI 识别学校来信"})
+    assert next(i for i in st["items"] if i["what"] == "接受港大录取")["school"] == "香港大学 HKU"
+    d = r["doc"]
+    st = act(wang, "outcome", student=sid, school=d["school"], kind=d["type"], result=d["result"], program=d["program"], conditions=d["conditions"], quote=d["quote"])
+    o = st["outcomes"][-1]
+    assert (o["school"], o["result"], o["conditions"][0]["due"]) == ("香港大学 HKU", "有条件录取", "2027-08-17")
+    assert "有条件录取" in st["logs"][0]["act"] and "8月17日前" in st["logs"][0]["act"] and st["logs"][0]["src"] == "学校来信"
+    st = act(wang, "undo", log=st["logs"][0]["id"])
+    assert not st["outcomes"]
