@@ -275,3 +275,19 @@ def test_addschool_backfill_marks_past_steps_done(setup):
     assert its["交 NYU 文书终稿"]["done"] == "2020-10-18"
     assert not its["付 NYU 申请费"]["done"] and not its["确认 NYU 期中成绩已提交"]["done"]
     assert "1 条日期已过" in st["logs"][0]["act"]
+
+
+def test_cancel_item_keeps_it_struck_and_logged(setup):
+    a, wang, sid = setup
+    st = act(wang, "additems", student=sid, items=[{"what": "补交高二成绩单", "owner": "家长", "due": "2099-11-09"}])
+    iid = next(i["id"] for i in st["items"] if i["what"] == "补交高二成绩单")
+    st = act(wang, "found", student=sid, found=[{"kind": "cancel", "item": iid, "quote": "不用补交成绩单了"}])
+    it = next(i for i in st["items"] if i["id"] == iid)
+    assert it["cancelled"] and it["done"]                                   # 划掉但还在
+    log = st["logs"][0]
+    assert log["src"] == "取消事项" and log["who"] == "王老师" and "不用补交成绩单了" in log["act"]
+    st = act(wang, "undo", log=log["id"])
+    it = next(i for i in st["items"] if i["id"] == iid)
+    assert not it["cancelled"] and not it["done"]
+    st = act(wang, "cancelitem", item=iid, reason="学校说不需要")
+    assert next(i for i in st["items"] if i["id"] == iid)["cancelled"] and "学校说不需要" in st["logs"][0]["act"]

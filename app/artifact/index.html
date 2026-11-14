@@ -235,7 +235,7 @@ function overdueMsg(name, its, key){      // 逾期提醒：一件事写成一�
 }
 function parts(name){
   const its = D.items.filter(i => i.student === name);
-  return { done: its.filter(i => i.done && diff(TODAY, i.done) <= 7), open: its.filter(i => !i.done).sort((a,b) => diff(a.due, b.due)),
+  return { done: its.filter(i => i.done && !i.cancelled && diff(TODAY, i.done) <= 7), open: its.filter(i => !i.done).sort((a,b) => diff(a.due, b.due)),
            need: its.filter(i => !i.done && i.owner === "家长") };
 }
 function progressMsg(name){
@@ -502,9 +502,9 @@ function capRight(idle){      // AI 整理的结果：录入页和留痕页共�
       ${r.newItems.map((u, i) => `<div class="upd ${cp.off[i] ? "off" : ""}"><input type="checkbox" data-upd="${i}" ${cp.off[i] ? "" : "checked"}>
         <div class="what grid3"><input type="text" data-res="${i}" data-f="what" value="${esc(u.what)}">${ownerSel(u.owner, `data-res="${i}" data-f="owner"`)}<input type="date" data-res="${i}" data-f="due" value="${esc(u.due)}"></div>
         <div class="src">${u.sug ? "来信里没写日期的常见后续，需要就勾上并填日期" : `原话：“${esc(u.quote)}”`}${u.school ? `　归到：${esc(u.school)}` : ""}${u.due || u.sug ? "" : ' <b class="err">日期没写或看不清，请对照原件填</b>'}</div></div>`).join("")}` : ""}
-      ${r.found.length ? `<div class="head" style="margin-top:12px"><b>家长回复和进展</b></div>
+      ${r.found.length ? `<div class="head" style="margin-top:12px"><b>已有事项的变化</b></div>
       ${r.found.map((u, i) => { const it = itemById(u.item); return `<label class="upd ${cp.offF[i] ? "off" : ""}"><input type="checkbox" data-updf="${i}" ${cp.offF[i] ? "" : "checked"}>
-        <div class="what"><span class="chip ${u.kind === "done" ? "green" : "acc"}">${u.kind === "done" ? "已完成" : u.kind === "note" ? "家长回复，只留痕" : "家长已回复"}</span> ${esc(it ? it.what : u.text)}</div>
+        <div class="what"><span class="chip ${u.kind === "done" ? "green" : u.kind === "cancel" ? "red" : "acc"}">${u.kind === "done" ? "已完成" : u.kind === "cancel" ? "取消这件事" : u.kind === "note" ? "家长回复，只留痕" : "家长已回复"}</span> ${u.kind === "cancel" && it ? `<s>${esc(it.what)}</s><span class="muted small">　原截止 ${md(it.due)}，确认后划掉并记进留痕</span>` : esc(it ? it.what : u.text)}</div>
         <div class="src">原话：“${esc(u.quote)}”</div></label>`; }).join("")}` : ""}
       ${r.transcript ? `<details class="small" style="margin-top:10px"><summary>图片里识别出的文字（请对照图片核对，原话都从这里来）</summary><div class="src" style="white-space:pre-wrap">${esc(r.transcript)}</div></details>` : ""}
       ${!r.newItems.length && !r.found.length && !d ? `<div class="empty">没找到明确的事项或回复。可以用下面的手动添加。</div>` : ""}
@@ -605,7 +605,7 @@ student(){
   const all = D.items.filter(i => i.student === name).sort((a,b) => (!!a.done - !!b.done) || diff(a.due, b.due));
   const sch = schoolsOf(name), other = all.filter(i => !i.school);
   const p = parts(name), gen = S.gen && S.gen.student === name ? S.gen : null;
-  const status = it => it.done ? `<span class="chip green">${md(it.done)}完成</span>` : overdue(it) ? `<span class="chip red">逾期</span>` : isFam(it) && !it.agreed ? `<span class="chip">未发约定</span>` : `<span class="chip ${light(it)}">${LN[light(it)]}</span>`;
+  const status = it => it.cancelled ? `<span class="chip">${md(it.cancelled)}取消</span>` : it.done ? `<span class="chip green">${md(it.done)}完成</span>` : overdue(it) ? `<span class="chip red">逾期</span>` : isFam(it) && !it.agreed ? `<span class="chip">未发约定</span>` : `<span class="chip ${light(it)}">${LN[light(it)]}</span>`;
   const editRow = it => `<tr class="open"><td colspan="5"><div class="edit">
       <div class="grid3"><label><span class="muted small">事项</span><input type="text" id="ed_what" value="${esc(it.what)}"></label>
         <label><span class="muted small">负责</span>${ownerSel(it.owner, 'id="ed_owner"')}</label>
@@ -613,14 +613,14 @@ student(){
       <label style="display:block;margin-top:8px"><span class="muted small">改动原因（记进留痕，可不填）</span><input type="text" id="ed_reason" placeholder="比如：学校推迟了推荐信截止"></label>
       <div class="row"><button class="btn" data-act="edititem" data-id="${it.id}">保存</button>
         ${isFam(it) && it.agreed && !it.replied ? `<button class="btn ghost" data-act="replied" data-id="${it.id}">家长回复了</button>` : ""}
-        <button class="btn ghost" data-act="deleteitem" data-id="${it.id}">删除</button><button class="linkbtn" data-act="openitem" data-id="">收起</button></div></div></td></tr>`;
+        ${it.done ? "" : `<button class="btn ghost" data-act="cancelitem" data-id="${it.id}">取消这件事</button>`}<button class="linkbtn" data-act="deleteitem" data-id="${it.id}">录错了，删除</button><button class="linkbtn" data-act="openitem" data-id="">收起</button></div></div></td></tr>`;
   const itemTable = (its, grouped) => `<table><tr><th></th><th>事项</th><th>负责</th><th>截止</th><th>状态</th></tr>
-      ${its.map(it => `<tr class="pick" data-act="openitem" data-id="${it.id}"><td class="ck">${it.done ? `<span class="ckb on" aria-label="已完成">✓</span>` : `<button class="ckb" data-act="done" data-id="${it.id}" aria-label="标为已完成" title="标为已完成"></button>`}</td><td>${esc(grouped ? shortWhat(it) : it.what)}</td><td class="nw">${esc(it.owner)}</td><td class="nw">${md(it.due)}</td><td class="nw">${status(it)}</td></tr>${S.open === it.id ? editRow(it) : ""}`).join("")}</table>`;
+      ${its.map(it => `<tr class="pick" data-act="openitem" data-id="${it.id}"><td class="ck">${it.cancelled ? "" : it.done ? `<span class="ckb on" aria-label="已完成">✓</span>` : `<button class="ckb" data-act="done" data-id="${it.id}" aria-label="标为已完成" title="标为已完成"></button>`}</td><td>${it.cancelled ? `<s class="muted">${esc(grouped ? shortWhat(it) : it.what)}</s>` : esc(grouped ? shortWhat(it) : it.what)}</td><td class="nw">${esc(it.owner)}</td><td class="nw">${md(it.due)}</td><td class="nw">${status(it)}</td></tr>${S.open === it.id ? editRow(it) : ""}`).join("")}</table>`;
   const block = (key, title, meta, its) => { const open = its.filter(i => !i.done).sort((a,b) => diff(a.due, b.due)), on = S.openSchool === key, isSchool = key !== "__other";
     const outs = isSchool ? (D.outcomes || []).filter(o => o.student === name && o.school === key) : [], lastRes = [...outs].reverse().find(o => o.result);
     const lt = open.length ? open.map(light).sort((a,b) => rank[a] - rank[b])[0] : "green";
     return `<div class="sch"><button class="schrow" data-openschool="${esc(key)}" aria-expanded="${on}"><span class="dot ${lt}"></span><b>${esc(title)}</b>
-        ${meta ? `<span class="muted small">${meta}</span>` : ""}${lastRes ? `<span class="chip ${lastRes.result === "拒绝" ? "red" : lastRes.result === "候补" || lastRes.result === "延期" ? "yellow" : "green"}">${esc(lastRes.result)}</span>` : ""}<span class="chip ${open.length ? "" : "green"}">${its.length - open.length}/${its.length} 完成</span>
+        ${meta ? `<span class="muted small">${meta}</span>` : ""}${lastRes ? `<span class="chip ${lastRes.result === "拒绝" ? "red" : lastRes.result === "候补" || lastRes.result === "延期" ? "yellow" : "green"}">${esc(lastRes.result)}</span>` : ""}<span class="chip ${open.length ? "" : "green"}">${its.filter(i => i.done && !i.cancelled).length}/${its.filter(i => !i.cancelled).length} 完成</span>
         <span class="muted small nx">${open.length ? "下一件：" + esc(isSchool ? shortWhat(open[0]) : open[0].what) + "，" + md(open[0].due) : "全部完成"}</span></button>
       ${on && outs.length ? `<div class="outs">${outs.map(o => `<div><b>${esc(o.result || DOCNAME[o.kind])}</b>${o.program ? `　${esc(o.program)}` : ""}<span class="muted small">　${md(o.date)}记录</span>
           ${o.conditions.length ? `<ul>${o.conditions.map(c => `<li>${esc(c.text)}${c.due ? `<span class="muted small">　${md(c.due)}前</span>` : ""}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>` : ""}
@@ -781,6 +781,8 @@ async function act(name, ds, el){
     case "previewbulk": { const t = val("bulk_in"); if (!t.trim()) return toast("先把表格粘贴进来"); S.bulk = {open: true, text: t, prev: parseBulk(t)}; return render(); }
     case "runbulk": { const p = S.bulk.prev; await runBulk(p); if (p.students.length) S.pick = p.students[0].name; else if (p.rows.length) S.pick = p.rows[0].name;
       S.bulk = {open: false, text: "", prev: null}; S.undo = null; render(); return toast(`已导入 ${p.students.length} 个学生、${p.rows.length} 所学校`); }
+    case "cancelitem": { const reason = prompt(`取消「${it.what}」？事项会划掉并留在原处。可以写一下原因（会记进留痕）：`); if (reason === null) return;
+      S.open = null; return api("cancelitem", {item: it.id, reason}, `取消 ${it.what}`); }
     case "deleteitem": { const reason = prompt(`删除「${it.what}」？请写一下原因（会记进留痕）：`); if (reason === null) return;
       S.open = null; return api("deleteitem", {item: it.id, reason}, `删除 ${it.what}`); }
     case "gen": S.gen = {student: S.pick, k: ds.k}; return render();
