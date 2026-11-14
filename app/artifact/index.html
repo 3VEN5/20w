@@ -504,9 +504,19 @@ function capRight(idle){      // AI 整理的结果：录入页和留痕页共�
         <div class="what grid3"><input type="text" data-res="${i}" data-f="what" value="${esc(u.what)}">${ownerSel(u.owner, `data-res="${i}" data-f="owner"`)}<input type="date" data-res="${i}" data-f="due" value="${esc(u.due)}"></div>
         <div class="src">${u.sug ? "来信里没写日期的常见后续，需要就勾上并填日期" : `原话：“${esc(u.quote)}”`}${u.school ? `　归到：${esc(u.school)}` : ""}${u.due || u.sug ? "" : ' <b class="err">日期没写或看不清，请对照原件填</b>'}</div></div>`).join("")}` : ""}
       ${r.found.length ? `<div class="head" style="margin-top:12px"><b>已有事项的变化</b></div>
-      ${r.found.map((u, i) => { const it = itemById(u.item); return `<label class="upd ${cp.offF[i] ? "off" : ""}"><input type="checkbox" data-updf="${i}" ${cp.offF[i] ? "" : "checked"}>
-        <div class="what"><span class="chip ${u.kind === "done" ? "green" : u.kind === "cancel" ? "red" : u.kind === "due" ? "yellow" : "acc"}">${u.kind === "done" ? "已完成" : u.kind === "cancel" ? "取消这件事" : u.kind === "due" ? "改截止日" : u.kind === "note" ? "家长回复，只留痕" : "家长已回复"}</span> ${u.kind === "cancel" && it ? `<s>${esc(it.what)}</s><span class="muted small">　原截止 ${md(it.due)}，确认后划掉并记进留痕</span>` : u.kind === "due" && it ? `${esc(it.what)}<span class="duefix"><span class="muted small">${md(it.due)} 改为</span><input type="date" data-fd="${i}" value="${esc(u.due || "")}" aria-label="新截止日">${u.due ? "" : '<b class="err">新日期没说清，请填</b>'}</span>` : esc(it ? it.what : u.text)}</div>
-        <div class="src">原话：“${esc(u.quote)}”</div></label>`; }).join("")}` : ""}
+      ${r.found.map((u, i) => { const it = u.item ? itemById(u.item) : null, k = u.kind, sch = u.school ? schoolsOf(cp.student).find(x => x.school === u.school) : null, openN = sch ? sch.its.filter(x => !x.done).length : 0;
+        const tag = ({done: ["green", "已完成"], cancel: ["red", "取消这件事"], due: ["yellow", "改截止日"], owner: ["acc", "改负责人"], restore: ["green", "恢复这件事"], dropschool: ["red", "整所移除"], sdl: ["yellow", "学校截止日变了"], note: ["", u.by === "顾问" ? "顾问备注，只留痕" : (u.by || "家长") + "的话，只留痕"], replied: ["acc", "家长已回复"]})[k];
+        const fix = old => `<span class="duefix"><span class="muted small">${old ? md(old) : "未填"} 改为</span><input type="date" data-fd="${i}" value="${esc(u.due || "")}" aria-label="新截止日">${u.due ? "" : '<b class="err">新日期没说清，请填</b>'}</span>`;
+        const body = k === "cancel" && it ? `<s>${esc(it.what)}</s><span class="muted small">　原截止 ${md(it.due)}，确认后划掉并记进留痕</span>`
+          : k === "due" && it ? esc(it.what) + fix(it.due)
+          : k === "owner" && it ? `${esc(it.what)}<span class="muted small">　${esc(it.owner)} 改为</span> <b>${esc(u.owner)}</b>`
+          : k === "restore" && it ? `${esc(it.what)}<span class="muted small">　${md(it.cancelled)}取消过，恢复后截止日还是 ${md(it.due)}，需要的话再改</span>`
+          : k === "dropschool" ? `<s>${esc(u.school)}</s><span class="muted small">　不申请了，连同 ${sch ? sch.its.length : 0} 条事项整所移除</span>`
+          : k === "sdl" ? `${esc(u.school)}${fix(sch && sch.sdl)}<span class="muted small">　${openN} 条未完成的事项按同样天数一起调整</span>`
+          : esc(it ? it.what : u.text);
+        return `<div class="upd ${cp.offF[i] ? "off" : ""}"><input type="checkbox" data-updf="${i}" ${cp.offF[i] ? "" : "checked"} aria-label="采用这一条">
+        <div class="what"><span class="chip ${tag[0]}">${tag[1]}</span> ${body}</div>
+        <div class="src">原话：“${esc(u.quote)}”</div></div>`; }).join("")}` : ""}
       ${r.transcript ? `<details class="small" style="margin-top:10px"><summary>图片里识别出的文字（请对照图片核对，原话都从这里来）</summary><div class="src" style="white-space:pre-wrap">${esc(r.transcript)}</div></details>` : ""}
       ${!r.newItems.length && !r.found.length && !d ? `<div class="empty">没找到明确的事项或回复。可以用下面的手动添加。</div>` : ""}
       ${r.dropped ? `<div class="muted small">另有 ${r.dropped} 条因为原话对不上原文，已自动丢掉。</div>` : ""}
@@ -614,7 +624,7 @@ student(){
       <label style="display:block;margin-top:8px"><span class="muted small">改动原因（记进留痕，可不填）</span><input type="text" id="ed_reason" placeholder="比如：学校推迟了推荐信截止"></label>
       <div class="row"><button class="btn" data-act="edititem" data-id="${it.id}">保存</button>
         ${isFam(it) && it.agreed && !it.replied ? `<button class="btn ghost" data-act="replied" data-id="${it.id}">家长回复了</button>` : ""}
-        ${it.done ? "" : `<button class="btn ghost" data-act="cancelitem" data-id="${it.id}">取消这件事</button>`}<button class="linkbtn" data-act="deleteitem" data-id="${it.id}">录错了，删除</button><button class="linkbtn" data-act="openitem" data-id="">收起</button></div></div></td></tr>`;
+        ${it.cancelled ? `<button class="btn ghost" data-act="restoreitem" data-id="${it.id}">恢复这件事</button>` : it.done ? "" : `<button class="btn ghost" data-act="cancelitem" data-id="${it.id}">取消这件事</button>`}<button class="linkbtn" data-act="deleteitem" data-id="${it.id}">录错了，删除</button><button class="linkbtn" data-act="openitem" data-id="">收起</button></div></div></td></tr>`;
   const itemTable = (its, grouped) => `<table><tr><th></th><th>事项</th><th>负责</th><th>截止</th><th>状态</th></tr>
       ${its.map(it => `<tr class="pick" data-act="openitem" data-id="${it.id}"><td class="ck">${it.cancelled ? "" : it.done ? `<span class="ckb on" aria-label="已完成">✓</span>` : `<button class="ckb" data-act="done" data-id="${it.id}" aria-label="标为已完成" title="标为已完成"></button>`}</td><td>${it.cancelled ? `<s class="muted">${esc(grouped ? shortWhat(it) : it.what)}</s>` : esc(grouped ? shortWhat(it) : it.what)}</td><td class="nw">${esc(it.owner)}</td><td class="nw">${md(it.due)}</td><td class="nw">${status(it)}</td></tr>${S.open === it.id ? editRow(it) : ""}`).join("")}</table>`;
   const block = (key, title, meta, its) => { const open = its.filter(i => !i.done).sort((a,b) => diff(a.due, b.due)), on = S.openSchool === key, isSchool = key !== "__other";
@@ -784,6 +794,7 @@ async function act(name, ds, el){
       S.bulk = {open: false, text: "", prev: null}; S.undo = null; render(); return toast(`已导入 ${p.students.length} 个学生、${p.rows.length} 所学校`); }
     case "cancelitem": { const reason = prompt(`取消「${it.what}」？事项会划掉并留在原处。可以写一下原因（会记进留痕）：`); if (reason === null) return;
       S.open = null; return api("cancelitem", {item: it.id, reason}, `取消 ${it.what}`); }
+    case "restoreitem": S.open = null; return api("restoreitem", {item: it.id}, `恢复 ${it.what}`);
     case "deleteitem": { const reason = prompt(`删除「${it.what}」？请写一下原因（会记进留痕）：`); if (reason === null) return;
       S.open = null; return api("deleteitem", {item: it.id, reason}, `删除 ${it.what}`); }
     case "gen": S.gen = {student: S.pick, k: ds.k}; return render();
@@ -811,13 +822,13 @@ async function act(name, ds, el){
       if (miss >= 0){ const box = document.querySelector(`[data-res="${miss}"][data-f="${r.newItems[miss].due ? "what" : "due"}"]`);      // 直接跳到没填的那一格
         if (box){ box.scrollIntoView({block: "center"}); box.focus(); box.style.borderColor = "var(--red)"; }
         return toast("这一条还没填日期：填上，或者取消勾选"); }
-      const nod = r.found.findIndex((u, i) => !cp.offF[i] && u.kind === "due" && !u.due);
+      const nod = r.found.findIndex((u, i) => !cp.offF[i] && (u.kind === "due" || u.kind === "sdl") && !u.due);
       if (nod >= 0){ const box = document.querySelector(`[data-fd="${nod}"]`); if (box){ box.scrollIntoView({block: "center"}); box.focus(); box.style.borderColor = "var(--red)"; } return toast("新的截止日还没填：填上，或者取消勾选"); }
       const d = r.doc && !cp.offD ? r.doc : null;
       if (d && !d.school.trim()) return toast("请填学校名");
       if (on.length) await api("additems", {student: sid, items: on.map(u => ({what: u.what, owner: u.owner, due: u.due, school: u.school, quote: u.quote})), from: d ? "AI 识别学校来信" : cp.imgs.length ? "AI 整理笔记/聊天/图片" : "AI 整理笔记/聊天"}, `${on.length} 条事项`);
       if (d) await api("outcome", {student: sid, school: d.school.trim(), kind: d.type, result: d.result, program: d.program, conditions: d.conditions.filter((c, i) => !cp.offC[i]).map(c => ({text: c.text, due: c.due})), quote: d.quote}, `${d.school} ${d.result || DOCNAME[d.type]}`);
-      if (fd.length) await api("found", {student: sid, found: fd}, fd.length === 1 && fd[0].kind !== "note" ? ({due: "改截止日", cancel: "取消", done: "完成", replied: "家长回复"})[fd[0].kind] + " " + (itemById(fd[0].item) || {}).what : undefined);
+      if (fd.length) await api("found", {student: sid, found: fd}, fd.length === 1 && fd[0].kind !== "note" ? ({due: "改截止日", cancel: "取消", done: "完成", replied: "家长回复", owner: "改负责人", restore: "恢复", dropschool: "移除", sdl: "改学校截止日"})[fd[0].kind] + " " + (fd[0].school || (itemById(fd[0].item) || {}).what) : undefined);
       cp.res = null; cp.text = ""; cp.imgs = []; render(); return toast("已写入"); }
     case "vary": S.v[ds.key] = (S.v[ds.key] || 0) + 1; return render();
     case "toggleadd": S.addOpen = !S.addOpen; S.add = blankAdd(); return render();
