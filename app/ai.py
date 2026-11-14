@@ -8,9 +8,8 @@
 配置（环境变量）：AI_API_KEY（必填，不填就只能手动添加）、AI_BASE_URL（默认 DeepSeek）、AI_MODEL（默认 deepseek-chat）。
 任何兼容 OpenAI 接口的服务都能用，比如 DeepSeek、通义千问。
 
-图片识别（可选）：DeepSeek 不能看图，要另配一个能看图的模型。填了 AI_VISION_MODEL 才开通。
-  AI_VISION_MODEL（比如 qwen-vl-max）、AI_VISION_BASE_URL（默认通义千问 https://dashscope.aliyuncs.com/compatible-mode/v1）、
-  AI_VISION_API_KEY（不填就用 AI_API_KEY）。
+图片识别：默认也用 DeepSeek，模型 deepseek-flash（能看图），和文字用同一个密钥，不用另外配。
+  想换别家：AI_VISION_MODEL（比如 qwen-vl-max）、AI_VISION_BASE_URL、AI_VISION_API_KEY。AI_VISION_MODEL=off 关掉图片识别。
 图片里的原话核对的是模型自己转写出的文字，所以页面会把转写给顾问对照图片看。图片不保存。
 """
 import json, os, re
@@ -19,6 +18,7 @@ from datetime import datetime
 import httpx
 
 OWNERS = {"学生", "家长", "学校", "机构"}
+VISION_MODEL = "deepseek-flash"      # DeepSeek 能看图的模型（官方文档 api-docs.deepseek.com/guides/vision）
 
 
 class AIError(Exception):
@@ -30,7 +30,7 @@ def enabled():
 
 
 def images_enabled():
-    return bool(os.environ.get("AI_VISION_MODEL") and (os.environ.get("AI_VISION_API_KEY") or os.environ.get("AI_API_KEY")))
+    return os.environ.get("AI_VISION_MODEL", VISION_MODEL) != "off" and bool(os.environ.get("AI_VISION_API_KEY") or os.environ.get("AI_API_KEY"))
 
 
 # 提示词：系统提示词讲规则和格式（固定不变），用户消息放这一次的材料。DeepSeek、通义千问、豆包、Kimi、智谱等国内模型都能直接用。
@@ -48,22 +48,23 @@ SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一�
   - type 只能是：offer（录取通知）、补材料、面试、拒信、候补、其他。
   - school：学校名。“已报名学校”里有同一所学校时，照抄那里的写法；没有就照抄材料里的写法。
   - program：专业或项目名，照抄材料，没有写 ""。
-  - result 只能是：有条件录取、无条件录取、拒绝、候补、""（不是录取结果时写 ""）。
-  - conditions：录取条件或学校提出的要求，一条写一项。text 用中文简要概括（成绩、分数、科目、证书名照抄原文，不要换算），due 是这一条要求的最晚日期，quote 是原话。
+  - result 只能是：有条件录取、无条件录取、延期、拒绝、候补、""（不是录取结果时写 ""）。延期指提前批没有录取、转到常规轮再审（deferred），这时 type 写“其他”。
+  - conditions：录取条件或学校提出的要求，一条写一项。text 用中文简要概括（成绩、分数、科目、证书名照抄原文，不要换算），due 是这一条要求的最晚日期，quote 是原话。接受录取的截止日、开学日期、学费金额不算条件，不要写进 conditions。只写学生要达到的标准（成绩、语言分数、毕业、学位等），“请登录系统确认”“请回复”这类办手续的提醒不算条件。
   - quote：材料里说明这是什么通知的那句原话。
 四、图片转写 transcript：有图片时，先把图片里和申请事项有关的文字逐字抄下来。
 
 【学校来信要生成哪些新事项】
-材料里写了日期的，才生成事项；没写日期的不要自己编，系统会另外提示顾问。
+材料里写了日期的，才生成事项；没写日期的不要自己编，系统会另外提示顾问。事项名称一律用简体中文，学校用顾问平时的叫法（港大、港科大、剑桥、曼大）。
 - offer：接受录取的截止日 → “接受 XX 录取”（学生）；押金、留位费、学费首付的截止日 → “付 XX 留位费”（家长）；每一条带日期的录取条件 → “达到 XX 录取条件并提交成绩”或“提交 XX 语言成绩”等（学生）；要求补交文件的截止日 → “提交 XX 最终成绩单”等（学校或学生）。开学或报到日期写成“XX 开学报到”（学生）。
 - 补材料：每一份要补的材料一条事项，按材料归谁办来定负责人（成绩单、推荐信是学校；护照、资金证明是家长；作品集、问卷是学生）。
 - 面试：有回复或预约截止日 → “预约 XX 面试时间”（学生）；有面试日期 → “参加 XX 面试”（学生）。
 - 候补：要求在某天前回复是否留在候补名单 → “回复 XX 是否留在候补名单”（学生）。
+- 延期：要求在某天前提交期中成绩或补充材料 → “提交 XX 期中成绩”（学校）或“向 XX 提交补充材料”（学生）。
 - 拒信：不生成事项，只填 doc。
 
 【规则】
 1. owner 只能是这四个词之一：学生、家长、学校、机构。“机构”指顾问或机构自己要做的事；“学校”指学生所在中学要做的事，比如成绩单、推荐信。
-2. due 写成 YYYY-MM-DD。材料里是“22 号”“下周一”“月底”这类说法时，按“今天”的日期推算；英文日期（March 31, 2025）直接换成这个格式，年份照材料写，不要改。材料里没有提到时间就写空字符串 ""，不要猜。
+2. due 写成 YYYY-MM-DD。材料里是“22 号”“下周一”“月底”这类说法时，按“今天”的日期推算；英文日期（March 31, 2025）直接换成这个格式，年份照材料写，不要改。材料里只给了一段时间范围、还没定具体哪天的（比如“面试在 9 日到 13 日之间”），due 也写 ""，让顾问定下来后自己填；“某天之前”这种截止日照常写那一天。材料里明明有这件事、但日期被遮住或看不清的（比如“If we do not hear from you by [看不清]”），事项照常生成，due 写 ""，让顾问对照原件填。材料里没有提到时间就写空字符串 ""，不要猜。
 3. 每一条都必须带 quote：从材料原文或你的 transcript 里一字不差复制的一小段原话，作为依据。原文是英文就复制英文，不要翻译，不要改写，不要把两句拼成一句。找不到原话依据的内容不要输出。
 4. 不要把已有事项重复当成新事项。闲聊、没有明确动作的话，不要整理成事项。
 5. what 用简短的动宾短语，不超过 20 个字，比如“付托福送分费”“接受港大录取”。
@@ -121,7 +122,7 @@ USER_PROMPT = """今天：{today}。学生：{student}；家长称呼：{parent}
 >>>"""
 
 DOC_TYPES = {"offer", "补材料", "面试", "拒信", "候补", "其他"}
-DOC_RESULTS = {"有条件录取", "无条件录取", "拒绝", "候补", ""}
+DOC_RESULTS = {"有条件录取", "无条件录取", "延期", "拒绝", "候补", ""}
 
 
 def _norm(s):
@@ -148,7 +149,7 @@ def extract(text, student, parent, open_items, today, images=(), schools=()):
     user = (USER_PROMPT.replace("{today}", today).replace("{student}", student).replace("{parent}", parent).replace("{items}", items).replace("{schools}", "、".join(schools) or "（还没有）")
             .replace("{imgnote}", f"（另附 {len(images)} 张图片）" if images else "").replace("{text}", text or "（没有文字，只有图片）"))
     if images:
-        model, base = os.environ["AI_VISION_MODEL"], os.environ.get("AI_VISION_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        model, base = os.environ.get("AI_VISION_MODEL", VISION_MODEL), os.environ.get("AI_VISION_BASE_URL", "https://api.deepseek.com")
         key = os.environ.get("AI_VISION_API_KEY") or os.environ["AI_API_KEY"]
         content = [{"type": "text", "text": user}] + [{"type": "image_url", "image_url": {"url": u}} for u in images]
         body = {"model": model, "temperature": 0, "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}]}

@@ -60,6 +60,12 @@ window.CFG = {
       "{家长}好，跟您说一下{学生}这边的情况：{事项}超过了原定的{截止}。越早补上对申请越有利，今天您看什么时间合适，我全程在。",
       "{家长}，打扰了。{事项}原本{截止}截止，目前还差这一步。我已经在跟进后续安排，您这边处理好以后告诉我，我马上接着办。"
     ],
+    // 同一个学生有两件以上逾期事项时，合成一条消息发，不一件一件地发
+    overdueMany: [
+      "{家长}，{学生}有几件事已经过了原定的时间，我列在下面：\n{列表}\n您别着急，我先去确认还能不能补办。您这边方便的话尽快处理，需要我陪着操作随时叫我。",
+      "{家长}您好，跟您同步一下{学生}这边还没完成的几件事：\n{列表}\n越早补上对申请越有利，哪一步不顺直接告诉我，我来想办法。",
+      "辛苦{家长}，下面几件事都过了原定时间，麻烦您抽空处理一下：\n{列表}\n您告诉我哪里不方便，我来配合。"
+    ],
     progressOpen: [
       "{家长}，{学生}现在的情况是这样：",
       "{家长}您好，跟您说下{学生}的申请进度。",
@@ -85,6 +91,19 @@ window.CFG = {
     { what: "确认 {学校} 推荐信已上传", owner: "学校", days: 7 },
     { what: "付 {学校} 申请费", owner: "家长", days: 5 },
     { what: "递交 {学校} 申请（{轮次}）", owner: "机构", days: 3 }
+  ],
+
+  // 一份申请报多所学校的系统，和各地区默认不需要的事项。按事项里的关键词认。
+  // once：整份申请只做一次的事。第一所学校生成时写成系统的名字（比如“付 UCAS 申请费”），同一系统再加学校时默认不勾。
+  // skip：这个系统或地区默认不生成的事项，顾问需要可以自己加。
+  systems: [
+    { name: "UCAS", regions: ["英国"], once: ["文书终稿", "成绩单", "推荐信", "申请费", "递交"], skip: ["送分"],
+      note: "英国本科走 UCAS，一份申请最多报 5 所：文书、推荐信、成绩单、申请费、递交都只做一次。" },
+    { name: "UC", schools: ["UC Berkeley", "UCLA", "UC San Diego", "UC Davis", "UC Irvine", "UC Santa Barbara", "UC Santa Cruz", "UC Riverside", "UC Merced"],
+      once: ["文书终稿", "申请费", "递交", "送分"], skip: ["成绩单", "推荐信", "期中成绩"],
+      note: "UC 各校区共用一份申请：文书、送分、递交只做一次，申请费按校区数一起付。申请时不用推荐信，成绩自己填报。" },
+    { name: "", regions: ["澳洲"], once: [], skip: ["文书终稿", "推荐信"],
+      note: "澳洲本科一般不需要文书和推荐信，个别专业要的话点“再加一项”。" }
   ],
 
   // 学校的中文名和简称。顾问输入这些也能搜到学校。左边必须和日期库里的学校名一字不差。
@@ -163,7 +182,7 @@ window.CFG = {
     "University of Cambridge": ["剑桥", "剑桥大学"],
     "Imperial College London": ["帝国理工", "帝国理工学院", "IC"],
     "UCL": ["伦敦大学学院", "University College London"],
-    "LSE": ["伦敦政经", "伦敦政治经济学院"],
+    "LSE": ["伦敦政经", "伦敦政治经济学院", "London School of Economics", "London School of Economics and Political Science"],
     "King's College London": ["伦敦国王学院", "国王学院", "KCL"],
     "University of Edinburgh": ["爱丁堡", "爱丁堡大学"],
     "University of Manchester": ["曼彻斯特", "曼大", "曼彻斯特大学"],
@@ -171,20 +190,20 @@ window.CFG = {
     "University of Warwick": ["华威", "华威大学"],
     "University of Melbourne": ["墨尔本大学", "墨大"],
     "University of Sydney": ["悉尼大学", "悉大", "USYD"],
-    "UNSW Sydney": ["新南威尔士大学", "新南", "UNSW"],
+    "UNSW Sydney": ["新南威尔士大学", "新南", "UNSW", "University of New South Wales"],
     "Australian National University": ["澳国立", "澳洲国立大学", "ANU"],
     "Monash University": ["莫纳什", "蒙纳士", "莫纳什大学"],
     "University of Queensland": ["昆士兰大学", "昆大", "UQ"],
     "University of Western Australia": ["西澳大学", "西澳", "UWA"],
     "Adelaide University": ["阿德莱德大学", "阿大"],
-    "香港大学 HKU": ["港大", "HKU", "The University of Hong Kong", "University of Hong Kong"],
-    "香港中文大学 CUHK": ["港中文", "中大", "CUHK", "The Chinese University of Hong Kong"],
-    "香港科技大学 HKUST": ["港科大", "科大", "HKUST", "The Hong Kong University of Science and Technology"],
-    "香港理工大学 PolyU": ["港理工", "理大", "PolyU", "The Hong Kong Polytechnic University"],
-    "香港城市大学 CityU": ["港城大", "城大", "CityU", "City University of Hong Kong"],
-    "香港浸会大学 HKBU": ["浸会", "浸大", "HKBU", "Hong Kong Baptist University"],
-    "岭南大学 Lingnan": ["岭南", "岭大"],
-    "香港教育大学 EdUHK": ["教大", "港教大", "EdUHK"]
+    "香港大学 HKU": ["香港大学", "港大", "HKU", "The University of Hong Kong", "University of Hong Kong"],
+    "香港中文大学 CUHK": ["香港中文大学", "港中文", "中大", "CUHK", "The Chinese University of Hong Kong"],
+    "香港科技大学 HKUST": ["香港科技大学", "港科大", "科大", "HKUST", "The Hong Kong University of Science and Technology"],
+    "香港理工大学 PolyU": ["香港理工大学", "港理工", "理大", "PolyU", "The Hong Kong Polytechnic University"],
+    "香港城市大学 CityU": ["香港城市大学", "港城大", "城大", "CityU", "City University of Hong Kong"],
+    "香港浸会大学 HKBU": ["香港浸会大学", "浸会", "浸大", "HKBU", "Hong Kong Baptist University"],
+    "岭南大学 Lingnan": ["岭南大学", "Lingnan University", "岭南", "岭大"],
+    "香港教育大学 EdUHK": ["香港教育大学", "The Education University of Hong Kong", "教大", "港教大", "EdUHK"]
   },
 
   // 只对某些轮次或地区才有的默认事项。rounds、regions 不写就是都适用；days 为负数表示在学校截止日之后。
@@ -196,18 +215,26 @@ window.CFG = {
   ],
 
   // 识别出学校来信后，来信里没写日期的常见后续。列出来但默认不勾，顾问需要就勾上并填日期。
-  // key：来信里已经读出同类事项时不重复列（事项名包含 key 就算有了）。
+  // key：来信里已经读出同类事项时不重复列（事项名包含 key 就算有了，多个写法用 | 隔开）。rounds、regions：只对这些轮次或地区的学校列出。
   afterDoc: {
     "有条件录取": [
+      { key: "撤回|撤销", what: "撤回其他学校的申请", owner: "机构", rounds: ["ED", "EDII"] },
+      { key: "UCAS", what: "在 UCAS 回复首选和保底", owner: "学生", regions: ["英国"] },
       { key: "留位费", what: "付留位费", owner: "家长" },
       { key: "最终成绩", what: "提交最终成绩单", owner: "学校" },
       { key: "宿舍", what: "申请宿舍", owner: "学生" },
       { key: "签证", what: "办理学生签证", owner: "家长" }
     ],
     "无条件录取": [
+      { key: "撤回|撤销", what: "撤回其他学校的申请", owner: "机构", rounds: ["ED", "EDII"] },
+      { key: "UCAS", what: "在 UCAS 回复首选和保底", owner: "学生", regions: ["英国"] },
       { key: "留位费", what: "付留位费", owner: "家长" },
       { key: "宿舍", what: "申请宿舍", owner: "学生" },
       { key: "签证", what: "办理学生签证", owner: "家长" }
+    ],
+    "延期": [
+      { key: "期中成绩", what: "提交期中成绩", owner: "学校" },
+      { key: "补充材料", what: "向学校提交补充材料或新成绩", owner: "学生" }
     ],
     "候补": [
       { key: "候补", what: "回复是否留在候补名单", owner: "学生" },
@@ -226,6 +253,25 @@ window.CFG = {
     REA: "REA 是限制性提前批：不绑定，但同时申请别的学校提前批会受限制，具体以这所学校官网为准。"
   },
   roundNotes: {
+    "Harvard University": {
+      REA: "不能同时申请其他私立大学的提前批；公立大学和美国以外大学的 EA 可以申请。"
+    },
+    "Stanford University": {
+      REA: "不能同时申请其他私立大学的任何提前批，也不能申请公立大学的绑定提前批。公立大学的非绑定提前批、滚动录取、美国以外的大学可以申请；被延后或拒绝后可以申请别校 ED II。"
+    },
+    "Princeton University": {
+      REA: "不能同时申请其他私立大学的提前批；公立大学、美国以外大学的非绑定提前批和非绑定滚动录取可以申请。"
+    },
+    "Yale University": {
+      REA: "不能同时申请其他学校的 EA 或 ED。例外：非绑定的滚动录取、公立大学的非绑定提前批、1 月 1 日之后才放榜的提前批（如 ED II）、美国以外的大学。"
+    },
+    "California Institute of Technology (Caltech)": {
+      REA: "不能同时申请其他学校的 EA 或 ED。例外：美国以外的大学、公立大学的非绑定申请（如 UC）、非绑定滚动录取；被延后以后可以申请别校 ED II。"
+    },
+    "Carnegie Mellon University": {
+      ED: "戏剧学院、音乐学院和 BXA 设计项目不能 ED。",
+      RD: "戏剧和音乐学院的截止是 12 月 1 日，比这里的日期早。"
+    },
     "Georgia Institute of Technology": {
       EA: "这一轮（EA1）只给佐治亚州的学生。州外和国际学生请选 EA II。",
       EAII: "这一轮（EA2）给佐治亚州以外的学生，包括国际学生。想评奖学金必须走提前批。"
