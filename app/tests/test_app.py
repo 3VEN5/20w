@@ -275,3 +275,96 @@ def test_addschool_backfill_marks_past_steps_done(setup):
     assert its["交 NYU 文书终稿"]["done"] == "2020-10-18"
     assert not its["付 NYU 申请费"]["done"] and not its["确认 NYU 期中成绩已提交"]["done"]
     assert "1 条日期已过" in st["logs"][0]["act"]
+
+
+def test_cancel_item_keeps_it_struck_and_logged(setup):
+    a, wang, sid = setup
+    st = act(wang, "additems", student=sid, items=[{"what": "补交高二成绩单", "owner": "家长", "due": "2099-11-09"}])
+    iid = next(i["id"] for i in st["items"] if i["what"] == "补交高二成绩单")
+    st = act(wang, "found", student=sid, found=[{"kind": "cancel", "item": iid, "quote": "不用补交成绩单了"}])
+    it = next(i for i in st["items"] if i["id"] == iid)
+    assert it["cancelled"] and it["done"]                                   # 划掉但还在
+    log = st["logs"][0]
+    assert log["src"] == "取消事项" and log["who"] == "王老师" and "不用补交成绩单了" in log["act"]
+    st = act(wang, "undo", log=log["id"])
+    it = next(i for i in st["items"] if i["id"] == iid)
+    assert not it["cancelled"] and not it["done"]
+    st = act(wang, "cancelitem", item=iid, reason="学校说不需要")
+    assert next(i for i in st["items"] if i["id"] == iid)["cancelled"] and "学校说不需要" in st["logs"][0]["act"]
+
+
+def test_found_due_changes_deadline_and_logs(setup):
+    a, wang, sid = setup
+    st = act(wang, "additems", student=sid, items=[{"what": "交港大成绩单", "owner": "学校", "due": "2099-11-18"}])
+    iid = next(i["id"] for i in st["items"] if i["what"] == "交港大成绩单")
+    st = act(wang, "found", student=sid, found=[{"kind": "due", "item": iid, "due": "2099-11-25", "quote": "港大成绩单推迟到下周再交"}])
+    assert next(i for i in st["items"] if i["id"] == iid)["due"] == "2099-11-25"
+    log = st["logs"][0]
+    assert log["src"] == "改截止日" and "11月18日 改为 11月25日" in log["act"] and "推迟到下周" in log["act"]
+    st = act(wang, "undo", log=log["id"])
+    assert next(i for i in st["items"] if i["id"] == iid)["due"] == "2099-11-18"
+
+
+def test_found_owner_restore_and_note_by(setup):
+    a, wang, sid = setup
+    st = act(wang, "additems", student=sid, items=[{"what": "付港大申请费", "owner": "家长", "due": "2099-11-20"}])
+    iid = next(i["id"] for i in st["items"] if i["what"] == "付港大申请费")
+    st = act(wang, "found", student=sid, found=[{"kind": "owner", "item": iid, "owner": "学生", "quote": "申请费改成学生自己付"}])
+    assert next(i for i in st["items"] if i["id"] == iid)["owner"] == "学生"
+    assert st["logs"][0]["src"] == "改负责人" and "从家长改为学生" in st["logs"][0]["act"]
+    st = act(wang, "undo", log=st["logs"][0]["id"])
+    assert next(i for i in st["items"] if i["id"] == iid)["owner"] == "家长"
+
+    act(wang, "cancelitem", item=iid, reason="说错了")
+    st = act(wang, "found", student=sid, found=[{"kind": "restore", "item": iid, "quote": "申请费还是要付的"}])
+    it = next(i for i in st["items"] if i["id"] == iid)
+    assert not it["cancelled"] and not it["done"]
+    assert st["logs"][0]["src"] == "恢复事项" and st["logs"][0]["who"] == "王老师"
+    st = act(wang, "undo", log=st["logs"][0]["id"])
+    assert next(i for i in st["items"] if i["id"] == iid)["cancelled"]
+    st = act(wang, "restoreitem", item=iid)
+    assert not next(i for i in st["items"] if i["id"] == iid)["cancelled"]
+
+    st = act(wang, "found", student=sid, found=[{"kind": "note", "by": "顾问", "text": "今天和家长通了电话"}])
+    assert st["logs"][0]["src"] == "备注" and st["logs"][0]["who"] == "王老师" and "家长回复" not in st["logs"][0]["act"]
+    st = act(wang, "found", student=sid, found=[{"kind": "note", "text": "我们再想想"}])
+    assert st["logs"][0]["src"] == "微信回复" and "家长回复" in st["logs"][0]["act"]
+
+
+def test_found_school_deadline_shift_and_drop(setup):
+    a, wang, sid = setup
+    steps = [{"what": "交 KCL 文书", "owner": "学生", "due": "2099-01-10"}, {"what": "付 KCL 申请费", "owner": "家长", "due": "2099-01-15"}]
+    st = act(wang, "addschool", student=sid, school="KCL", round="常规", deadline="2099-01-20", steps=steps)
+    ids = {i["what"]: i["id"] for i in st["items"] if i["school"] == "KCL"}
+    act(wang, "done", item=ids["交 KCL 文书"])
+    st = act(wang, "found", student=sid, found=[{"kind": "sdl", "school": "KCL", "due": "2099-01-25", "quote": "KCL截止日延到1月25号"}])
+    its = {i["what"]: i for i in st["items"] if i["school"] == "KCL"}
+    assert its["付 KCL 申请费"]["due"] == "2099-01-20" and its["交 KCL 文书"]["due"] == "2099-01-10"   # 已完成的不动
+    assert all(i["sdl"] == "2099-01-25" for i in its.values())
+    assert "顺延 5 天" in st["logs"][0]["act"]
+    st = act(wang, "undo", log=st["logs"][0]["id"])
+    its = {i["what"]: i for i in st["items"] if i["school"] == "KCL"}
+    assert its["付 KCL 申请费"]["due"] == "2099-01-15" and all(i["sdl"] == "2099-01-20" for i in its.values())
+
+    st = act(wang, "found", student=sid, found=[{"kind": "dropschool", "school": "KCL", "quote": "KCL不申了"}])
+    assert not [i for i in st["items"] if i["school"] == "KCL"] and st["logs"][0]["src"] == "移除学校"
+    st = act(wang, "undo", log=st["logs"][0]["id"])
+    assert len([i for i in st["items"] if i["school"] == "KCL"]) == 2
+
+
+def test_ai_check_new_kinds():
+    items = [{"id": 1, "what": "付申请费", "owner": "家长", "due": "2099-01-01", "cancelled": None},
+             {"id": 2, "what": "送分", "owner": "学生", "due": "2099-01-01", "cancelled": "2026-11-01"}]
+    text = "申请费改成学生自己付。送分还是要送的。KCL不申了。LSE截止日延到12月5号。MIT不申了。"
+    out = ai.check({"found": [
+        {"kind": "owner", "item": 1, "owner": "学生", "quote": "申请费改成学生自己付"},
+        {"kind": "owner", "item": 1, "owner": "路人", "quote": "申请费改成学生自己付"},
+        {"kind": "restore", "item": 2, "quote": "送分还是要送的"},
+        {"kind": "restore", "item": 1, "quote": "送分还是要送的"},
+        {"kind": "dropschool", "school": "KCL", "quote": "KCL不申了"},
+        {"kind": "dropschool", "school": "MIT", "quote": "MIT不申了"},
+        {"kind": "sdl", "school": "LSE", "due": "2099-12-05", "quote": "LSE截止日延到12月5号"},
+        {"kind": "done", "item": 1, "quote": "这句原文里没有"},
+    ]}, text, items, ["KCL", "LSE"])
+    got = [(f["kind"], f.get("item") or f.get("school")) for f in out["found"]]
+    assert got == [("owner", 1), ("restore", 2), ("dropschool", "KCL"), ("sdl", "LSE")], (got, out.get("dropped"))

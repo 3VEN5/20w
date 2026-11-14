@@ -43,7 +43,14 @@ SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一�
 二、已有事项的进展 found：
   - 家长或学生对某个已有事项表示知道了、同意、会去办：kind 写 "replied"，item 写那个事项的 id。
   - 某个已有事项已经办完：kind 写 "done"，item 写那个事项的 id。
-  - 家长的回复和任何已有事项都对不上，但值得留个记录（比如“收到，谢谢老师”）：kind 写 "note"，item 写 null。
+  - 顾问、家长或学校说某个已有事项不用做了、取消了、不需要了（比如“不用补交成绩单了”“这所不申了，申请费不用付”）：kind 写 "cancel"，item 写那个事项的 id。只是推迟、改时间不算取消。
+  - 某个已有事项的截止时间变了（推迟、提前、改到某天，比如“成绩单推迟到下周五再交”“学校把推荐信截止延到 12 月 1 号”）：kind 写 "due"，item 写那个事项的 id，due 写新的截止日（YYYY-MM-DD，按“今天”推算；只说“晚点”“过几天”算不出具体哪天就写 ""）。
+  - 某个已有事项换了负责人（比如“申请费改成学生自己付”）：kind 写 "owner"，item 写那个事项的 id，owner 写新的负责人（学生、家长、学校、机构之一）。
+  - 状态是“已取消”的事项又要做了（比如“送分还是要送的，之前说错了”）：kind 写 "restore"，item 写那个已取消事项的 id。不要为它新建事项。
+  - 整所学校不申请了（比如“LSE 不申了”），并且这所学校在“已报名学校”里：kind 写 "dropschool"，school 照抄“已报名学校”里的写法，item 写 null。不要再逐条取消它的事项。
+  - 学校整体的申请截止日变了（比如“港大第一批截止延到 12 月 5 号”）：kind 写 "sdl"，school 照抄“已报名学校”里的写法，due 写新的学校截止日，item 写 null。只是其中某一件事改时间，用上面的 "due"。
+  - 和任何已有事项都对不上，但值得留个记录的话（比如家长说“收到，谢谢老师”，或顾问自己记的一句情况）：kind 写 "note"，item 写 null，by 写这句话是谁说的：家长、学生、学校、顾问。材料是顾问自己写的笔记、没有标明是谁说的，就写“顾问”。
+  - replied、done、cancel、due、owner 只能用在状态是“待办”的事项上。
 三、学校来信 doc：材料是学校发给学生的正式通知时才填，否则 doc 写 null。
   - type 只能是：offer（录取通知）、补材料、面试、拒信、候补、其他。
   - school：学校名。“已报名学校”里有同一所学校时，照抄那里的写法；没有就照抄材料里的写法。
@@ -74,14 +81,14 @@ SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一�
 9. 只输出一个 JSON 对象。不要输出解释，不要用 ``` 包起来。没有内容的数组写 []。
 
 【输出格式】
-{"transcript":"","doc":null 或 {"type":"","school":"","program":"","result":"","conditions":[{"text":"","due":"","quote":""}],"quote":""},"newItems":[{"what":"","owner":"","due":"","school":"","quote":""}],"found":[{"kind":"replied 或 done 或 note","item":"已有事项的 id，note 时写 null","date":"YYYY-MM-DD","text":"","quote":""}]}
+{"transcript":"","doc":null 或 {"type":"","school":"","program":"","result":"","conditions":[{"text":"","due":"","quote":""}],"quote":""},"newItems":[{"what":"","owner":"","due":"","school":"","quote":""}],"found":[{"kind":"replied、done、cancel、due、owner、restore、dropschool、sdl、note 之一","item":"已有事项的 id，note 时写 null","date":"YYYY-MM-DD","due":"kind 是 due 或 sdl 时写新日期","owner":"kind 是 owner 时写新负责人","school":"kind 是 dropschool 或 sdl 时写学校","by":"kind 是 note 时写谁说的","text":"","quote":""}]}
 
 【例子一：聊天记录】
 输入：
 今天：2026-11-12。学生：张同学；家长称呼：张妈妈。
 已报名学校：UCLA
-已有事项（id｜事项｜负责人｜截止）：
-17｜付 UC 申请费｜家长｜2026-11-19
+已有事项（id｜事项｜负责人｜截止｜状态）：
+17｜付 UC 申请费｜家长｜2026-11-19｜待办
 材料：
 <<<
 顾问：张妈妈，UC 申请费记得 19 号前付
@@ -96,7 +103,7 @@ SYSTEM_PROMPT = """你是留学申请机构顾问的助理。顾问会给你一�
 输入：
 今天：2027-03-22。学生：陈同学；家长称呼：陈爸爸。
 已报名学校：香港大学 HKU、UCL
-已有事项（id｜事项｜负责人｜截止）：
+已有事项（id｜事项｜负责人｜截止｜状态）：
 （没有）
 材料：
 <<<
@@ -114,13 +121,15 @@ If we do not hear from you by March 31, 2027, our offer will no longer be valid.
 
 USER_PROMPT = """今天：{today}。学生：{student}；家长称呼：{parent}。
 已报名学校：{schools}
-已有事项（id｜事项｜负责人｜截止）：
+已有事项（id｜事项｜负责人｜截止｜状态）：
 {items}
 材料{imgnote}：
 <<<
 {text}
 >>>"""
 
+FOUND_KINDS = {"replied", "done", "cancel", "due", "owner", "restore", "dropschool", "sdl", "note"}
+NOTE_BY = {"家长", "学生", "学校", "顾问"}
 DOC_TYPES = {"offer", "补材料", "面试", "拒信", "候补", "其他"}
 DOC_RESULTS = {"有条件录取", "无条件录取", "延期", "拒绝", "候补", ""}
 
@@ -145,7 +154,7 @@ def _json(content):
 
 
 def extract(text, student, parent, open_items, today, images=(), schools=()):
-    items = "\n".join(f"{i['id']}｜{i['what']}｜{i['owner']}｜{i['due']}" for i in open_items) or "（没有）"
+    items = "\n".join(f"{i['id']}｜{i['what']}｜{i['owner']}｜{i['due']}｜{'已取消' if i.get('cancelled') else '待办'}" for i in open_items) or "（没有）"
     user = (USER_PROMPT.replace("{today}", today).replace("{student}", student).replace("{parent}", parent).replace("{items}", items).replace("{schools}", "、".join(schools) or "（还没有）")
             .replace("{imgnote}", f"（另附 {len(images)} 张图片）" if images else "").replace("{text}", text or "（没有文字，只有图片）"))
     if images:
@@ -166,12 +175,13 @@ def extract(text, student, parent, open_items, today, images=(), schools=()):
     except (KeyError, IndexError, TypeError, ValueError):
         raise AIError("AI 返回的格式不对，请再试一次或手动添加")
     transcript = str(out.get("transcript") or "")[:4000] if images else ""
-    return check(out, (text or "") + "\n" + transcript, open_items) | {"transcript": transcript}
+    return check(out, (text or "") + "\n" + transcript, open_items, schools) | {"transcript": transcript}
 
 
-def check(out, text, open_items):
+def check(out, text, open_items, schools=()):
     """程序检查：原话必须在原文里；负责人、日期、事项 id 必须合法。不合格的丢掉并计数。"""
-    src, ids = _norm(text), {i["id"] for i in open_items}
+    src = _norm(text)
+    ids, gone = {i["id"] for i in open_items if not i.get("cancelled")}, {i["id"] for i in open_items if i.get("cancelled")}
     new, found, dropped = [], [], 0
     for x in out.get("newItems") or []:
         q = str(x.get("quote") or "")
@@ -184,11 +194,29 @@ def check(out, text, open_items):
         q, kind, item = str(x.get("quote") or ""), x.get("kind"), x.get("item")
         if isinstance(item, str) and item.isdigit():
             item = int(item)                                   # 有的模型把 id 写成字符串
-        if kind not in ("replied", "done", "note") or not q or _norm(q) not in src or (kind != "note" and item not in ids):
+        if kind not in FOUND_KINDS or not q or _norm(q) not in src:
             dropped += 1
             continue
-        found.append({"kind": kind, "item": None if kind == "note" else item, "date": x.get("date") if _date_ok(x.get("date")) else "",
-                      "text": str(x.get("text") or q)[:300], "quote": q[:300]})
+        f = {"kind": kind, "item": None, "date": x.get("date") if _date_ok(x.get("date")) else "", "text": str(x.get("text") or q)[:300], "quote": q[:300]}
+        if kind == "note":
+            f["by"] = x.get("by") if x.get("by") in NOTE_BY else "家长"
+        elif kind in ("dropschool", "sdl"):                    # 针对整所学校：学校必须是这个学生已经报名的
+            if x.get("school") not in schools:
+                dropped += 1
+                continue
+            f["school"] = x["school"]
+            if kind == "sdl":
+                f["due"] = x.get("due") if _date_ok(x.get("due")) else ""
+        else:                                                  # 针对某一件事：id 必须对得上，状态也要对
+            if item not in (gone if kind == "restore" else ids) or (kind == "owner" and x.get("owner") not in OWNERS):
+                dropped += 1
+                continue
+            f["item"] = item
+            if kind == "due":
+                f["due"] = x.get("due") if _date_ok(x.get("due")) else ""
+            if kind == "owner":
+                f["owner"] = x["owner"]
+        found.append(f)
     doc, d = None, out.get("doc")
     if isinstance(d, dict) and d.get("type") in DOC_TYPES and str(d.get("school") or "").strip():
         q = str(d.get("quote") or "")

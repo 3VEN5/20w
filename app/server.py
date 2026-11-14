@@ -174,7 +174,7 @@ def state(u):
         "users": [{k: x[k] for k in ("id", "name", "role", "active")} | ({"login": x["login"]} if u["role"] == "owner" else {}) for x in users],
         "students": [{"id": s["id"], "name": s["name"], "parent": s["parent"], "consultant": cons_of[s["id"]], "consultant_id": s["consultant_id"]} for s in studs],
         "items": [{"id": i["id"], "student": sname[i["student_id"]], "what": i["what"], "owner": i["owner"], "due": i["due"], "created": i["created"],
-                   "agreed": i["agreed"], "replied": i["replied"], "replyText": i["reply_text"], "done": i["done"], "school": i["school"],
+                   "agreed": i["agreed"], "replied": i["replied"], "replyText": i["reply_text"], "done": i["done"], "cancelled": i["cancelled"], "school": i["school"],
                    "round": i["round"] or "", "sdl": i["sdl"] or "", "region": i["region"] or "", "rolling": bool(i["rolling"]),
                    "chases": chases.get(i["id"], [])} for i in items if i["student_id"] in sname],
         "logs": [{"id": l["id"], "date": l["at"][:10], "time": l["at"][11:], "who": l["who"], "src": l["src"], "act": l["act"],
@@ -299,11 +299,37 @@ def a_outcome(c, b):
 
 
 def a_found(c, b):
-    s = c.student(b.get("student"))
+    s, me = c.student(b.get("student")), c.u["name"]
     for f in (b.get("found") or [])[:20]:
-        if f.get("kind") == "note":                            # 家长的回复对不上具体事项，只留痕
-            t = txt(f.get("text") or f.get("quote"), "家长原话", 300)
-            c.log(s["id"], "微信回复", f"家长回复：“{t}”（从粘贴的内容识别，{c.u['name']}确认，不对应具体事项）", who=s["parent"], undo={"t": "none"})
+        kind = f.get("kind")
+        if kind == "note":                                     # 对不上具体事项，只留痕。按是谁说的分开记
+            t, by = txt(f.get("text") or f.get("quote"), "原话", 300), f.get("by") if f.get("by") in ai.NOTE_BY else "家长"
+            if by == "顾问":
+                c.log(s["id"], "备注", f"备注：“{t}”（{me}录入，不对应具体事项）", who=me, undo={"t": "none"})
+            else:
+                c.log(s["id"], "学校来信" if by == "学校" else "微信回复", f"{by}{'通知' if by == '学校' else '回复'}：“{t}”（从录入的内容识别，{me}确认，不对应具体事项）",
+                      who={"家长": s["parent"], "学生": s["name"], "学校": "学校"}[by], undo={"t": "none"})
+            continue
+        if kind in ("dropschool", "sdl"):                      # 针对整所学校
+            school, q = txt(f.get("school"), "学校", 100), txt(f.get("quote"), "原话", 300, required=False)
+            rows = c.con.execute("SELECT * FROM item WHERE student_id = ? AND agency_id = ? AND school = ? AND deleted = 0", (s["id"], c.aid, school)).fetchall()
+            if not rows:
+                bad("这个学生没有这所学校的事项")
+            if kind == "dropschool":
+                c.con.executemany("UPDATE item SET deleted = 1 WHERE id = ?", [(r["id"],) for r in rows])
+                c.log(s["id"], "移除学校", f"移除 {school}，连同 {len(rows)} 条事项：“{q}”（从录入的内容识别，{me}确认）", who=me, undo={"t": "restore", "ids": [r["id"] for r in rows]})
+                continue
+            new, old = date(f.get("due"), "新的学校截止日"), next((r["sdl"] for r in rows if r["sdl"]), None)
+            if new == old:
+                continue
+            delta = (datetime.strptime(new, "%Y-%m-%d") - datetime.strptime(old, "%Y-%m-%d")).days if old else 0
+            moved = {r["id"]: r["due"] for r in rows if not r["done"]} if delta else {}
+            for i, due in moved.items():
+                c.con.execute("UPDATE item SET due = ? WHERE id = ?", ((datetime.strptime(due, "%Y-%m-%d") + timedelta(days=delta)).strftime("%Y-%m-%d"), i))
+            c.con.executemany("UPDATE item SET sdl = ? WHERE id = ?", [(new, r["id"]) for r in rows])
+            c.log(s["id"], "改截止日", f"{school} 的学校截止日从 {md(old) if old else '未填'} 改为 {md(new)}"
+                  + (f"，{len(moved)} 条未完成的事项一起{'顺延' if delta > 0 else '提前'} {abs(delta)} 天" if moved else "") + f"：“{q}”（从录入的内容识别，{me}确认）",
+                  who=me, undo={"t": "shift", "ids": [r["id"] for r in rows], "sdl": old, "dues": moved})
             continue
         it = c.item(f.get("item"))
         if it["student_id"] != s["id"]:
@@ -314,6 +340,23 @@ def a_found(c, b):
             c.con.execute("UPDATE item SET replied = ?, reply_text = ? WHERE id = ?", (d, txt(f.get("text"), "原话", 300, required=False) or None, it["id"]))
             c.log(s["id"], "微信回复", f"家长 {md(d)} 回复：“{q}”（从粘贴的聊天识别，{c.u['name']}确认）", who=s["parent"],
                   undo={"t": "replied", "id": it["id"], "old": [it["replied"], it["reply_text"]]})
+        elif kind == "owner" and not it["done"] and f.get("owner") in OWNERS and f["owner"] != it["owner"]:
+            c.con.execute("UPDATE item SET owner = ? WHERE id = ?", (f["owner"], it["id"]))
+            c.log(s["id"], "改负责人", f"「{it['what']}」负责人从{it['owner']}改为{f['owner']}：“{q}”（从录入的内容识别，{me}确认）", who=me,
+                  undo={"t": "edit", "id": it["id"], "old": {"what": it["what"], "owner": it["owner"], "due": it["due"]}})
+        elif kind == "restore" and it["cancelled"]:
+            c.con.execute("UPDATE item SET done = NULL, cancelled = NULL WHERE id = ?", (it["id"],))
+            c.log(s["id"], "恢复事项", f"恢复「{it['what']}」（截止 {md(it['due'])}，{md(it['cancelled'])}取消过）：“{q}”（从录入的内容识别，{me}确认）", who=me,
+                  undo={"t": "recancel", "id": it["id"], "old": it["cancelled"]})
+        elif f.get("kind") == "due" and not it["done"]:
+            new = date(f.get("due"), "新截止日")
+            if new != it["due"]:
+                c.con.execute("UPDATE item SET due = ? WHERE id = ?", (new, it["id"]))
+                c.log(s["id"], "改截止日", f"「{it['what']}」截止日从 {md(it['due'])} 改为 {md(new)}：“{q}”（从录入的内容识别，{c.u['name']}确认）", who=c.u["name"],
+                      undo={"t": "due", "id": it["id"], "old": it["due"]})
+        elif f.get("kind") == "cancel" and not it["done"]:
+            c.con.execute("UPDATE item SET done = ?, cancelled = ? WHERE id = ?", (c.today, c.today, it["id"]))
+            c.log(s["id"], "取消事项", f"取消「{it['what']}」（原截止 {md(it['due'])}）：“{q}”（从录入的内容识别，{c.u['name']}确认）", who=c.u["name"], undo={"t": "cancel", "id": it["id"]})
         elif f.get("kind") == "done" and not it["done"]:
             c.con.execute("UPDATE item SET done = ? WHERE id = ?", (c.today, it["id"]))
             c.log(s["id"], "完成", f"完成「{it['what']}」：“{q}”（从粘贴的聊天识别，{c.u['name']}确认）", who=it["owner"], undo={"t": "done", "id": it["id"]})
@@ -392,6 +435,24 @@ def a_removeschool(c, b):
     c.log(s["id"], "移除学校", f"移除 {school}，连同 {len(ids)} 条事项" + (f"，原因：{reason}" if reason else ""), undo={"t": "restore", "ids": ids})
 
 
+def a_cancelitem(c, b):
+    """取消一件事：不删，划掉留在原处，留痕里写明谁在哪天取消的。"""
+    it = c.item(b.get("item"))
+    if it["done"]:
+        bad("这件事已经完成或取消了")
+    reason = txt(b.get("reason"), "取消原因", 200, required=False)
+    c.con.execute("UPDATE item SET done = ?, cancelled = ? WHERE id = ?", (c.today, c.today, it["id"]))
+    c.log(it["student_id"], "取消事项", f"取消「{it['what']}」（原截止 {md(it['due'])}）" + (f"，原因：{reason}" if reason else ""), who=c.u["name"], undo={"t": "cancel", "id": it["id"]})
+
+
+def a_restoreitem(c, b):
+    it = c.item(b.get("item"))
+    if not it["cancelled"]:
+        bad("这件事没有被取消")
+    c.con.execute("UPDATE item SET done = NULL, cancelled = NULL WHERE id = ?", (it["id"],))
+    c.log(it["student_id"], "恢复事项", f"恢复「{it['what']}」（截止 {md(it['due'])}，{md(it['cancelled'])}取消过）", who=c.u["name"], undo={"t": "recancel", "id": it["id"], "old": it["cancelled"]})
+
+
 def a_deleteitem(c, b):
     it = c.item(b.get("item"))
     reason = txt(b.get("reason"), "删除原因", 200, required=False)
@@ -411,6 +472,13 @@ def a_undo(c, b):
         c.con.execute("DELETE FROM chase WHERE id = ?", (u["id"],))
     elif t == "done":
         c.con.execute("UPDATE item SET done = NULL WHERE id = ? AND agency_id = ?", (u["id"], c.aid))
+    elif t == "cancel":
+        c.con.execute("UPDATE item SET done = NULL, cancelled = NULL WHERE id = ? AND agency_id = ?", (u["id"], c.aid))
+    elif t == "recancel":
+        c.con.execute("UPDATE item SET done = ?, cancelled = ? WHERE id = ? AND agency_id = ?", (u["old"], u["old"], u["id"], c.aid))
+    elif t == "shift":
+        c.con.executemany("UPDATE item SET sdl = ? WHERE id = ? AND agency_id = ?", [(u["sdl"], i, c.aid) for i in u["ids"]])
+        c.con.executemany("UPDATE item SET due = ? WHERE id = ? AND agency_id = ?", [(d, int(i), c.aid) for i, d in u["dues"].items()])
     elif t == "agreed":
         c.con.executemany("UPDATE item SET agreed = NULL WHERE id = ? AND agency_id = ?", [(i, c.aid) for i in u["ids"]])
     elif t == "replied":
@@ -519,7 +587,7 @@ async def extract(request: Request, u=Depends(current_user)):
     text = txt(b.get("text"), "内容", 12000, required=not images)
     with db.connect() as con:
         s = Ctx(con, u).student(b.get("student"))
-        open_items = [dict(r) for r in con.execute("SELECT id, what, owner, due FROM item WHERE student_id = ? AND deleted = 0 AND done IS NULL", (s["id"],))]
+        open_items = [dict(r) for r in con.execute("SELECT id, what, owner, due, cancelled FROM item WHERE student_id = ? AND deleted = 0 AND (done IS NULL OR cancelled IS NOT NULL)", (s["id"],))]
         schools = [r[0] for r in con.execute("SELECT DISTINCT school FROM item WHERE student_id = ? AND deleted = 0 AND school IS NOT NULL", (s["id"],))]
     if not ai.enabled():
         bad("还没有配置 AI 服务，请用手动添加")

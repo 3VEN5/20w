@@ -55,6 +55,8 @@ def init():
         for col in ("round", "sdl", "region"):
             if col not in have("item"):
                 con.execute(f"ALTER TABLE item ADD COLUMN {col} TEXT")
+        if "cancelled" not in have("item"):
+            con.execute("ALTER TABLE item ADD COLUMN cancelled TEXT")
         if "rolling" not in have("item"):
             con.execute("ALTER TABLE item ADD COLUMN rolling INTEGER NOT NULL DEFAULT 0")
         if "region" not in have("custom_school"):

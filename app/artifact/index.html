@@ -7,50 +7,55 @@
 <style>
 /* 样式。一般不用改；颜色在 :root 里。 */
 :root{
-  --bg:#F3F5F4; --surface:#fff; --sunk:#EAEFEE; --ink:#16282A; --muted:#5B6C6D; --line:#D7E0DF;
-  --accent:#2F5D62; --accent-ink:#fff; --accent-soft:#DFEBEB;
+  --bg:#FAFAFA; --surface:#fff; --sunk:#F4F4F5; --ink:#09090B; --muted:#71717A; --line:#E4E4E7;
+  --accent:#18181B; --accent-ink:#fff; --accent-soft:#F4F4F5;
   --red:#B4372A; --red-bg:#FBE8E5; --amber:#7A5A00; --amber-bg:#FFE97A; --green:#2C7448; --green-bg:#E3F2E8;
-  --shadow:0 1px 2px rgba(22,40,42,.06),0 6px 18px rgba(22,40,42,.07);
+  --shadow:0 1px 2px rgba(0,0,0,.04);
   --f:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
-  --fd:"Noto Serif SC","Songti SC",serif;
+  --fd:var(--f);
 }
 *{box-sizing:border-box} [hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.6}
 button,select,input,textarea{font:inherit;color:inherit}
-button{cursor:pointer}
+button{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 header{position:sticky;top:0;z-index:10;background:var(--surface);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
 .bar{display:flex;align-items:center;gap:12px;padding-block:10px;flex-wrap:wrap}
-.brand{font-family:var(--fd);font-size:18px;white-space:nowrap}
+.brand{font-family:var(--fd);font-size:18px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
 .brand small{font-family:var(--f);font-weight:400;color:var(--muted);font-size:12px;margin-left:8px}
-.roles{margin-left:auto;display:flex;background:var(--sunk);border-radius:999px;padding:3px}
-.roles button{border:0;background:none;border-radius:999px;padding:5px 14px;color:var(--muted);font-size:14px;white-space:nowrap}
-.roles button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.roles{margin-left:auto;display:flex;background:var(--sunk);border-radius:8px;padding:3px}
+.roles button{border:0;background:none;border-radius:6px;padding:5px 14px;color:var(--muted);font-size:14px;white-space:nowrap}
+.roles button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .tabs{display:flex;gap:2px;border-top:1px solid var(--line)}
 .tabs button{border:0;background:none;padding:9px 14px 7px;color:var(--muted);border-bottom:2px solid transparent;font-weight:500}
-.tabs button[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tabs button:hover{color:var(--ink)}
 .tabs .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:999px;background:var(--red);color:#fff;font-size:11px;line-height:18px;text-align:center}
 .fake{background:var(--amber-bg);color:var(--amber);font-size:12px;text-align:center;padding:3px 8px}
 main{padding-block:20px 80px}
-h2{font-size:16px;margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+h2{font-size:16px;margin:24px 0 12px;display:flex;align-items:center;gap:4px 8px;flex-wrap:wrap}
 h2:first-child{margin-top:0}
 h2 .cnt{font-size:12px;font-weight:500;background:var(--sunk);color:var(--muted);border-radius:999px;padding:0 8px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:14px;margin-bottom:10px}
-.card.red{border-left:4px solid var(--red)} .card.yellow{border-left:4px solid #F2C200}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+.card.red{box-shadow:inset 3px 0 0 var(--red),var(--shadow)} .card.yellow{box-shadow:inset 3px 0 0 #F2C200,var(--shadow)}
 .muted{color:var(--muted)} .small{font-size:13px}
-.head{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 .head b{font-size:15px}
-.chip{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap}
-.chip.red{background:var(--red-bg);color:var(--red)} .chip.yellow{background:var(--amber-bg);color:var(--amber)} .chip.green{background:var(--green-bg);color:var(--green)} .chip.acc{background:var(--accent-soft);color:var(--accent)}
+.chip{display:inline-block;font-size:12px;line-height:1.5;padding:2px 8px;border-radius:6px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chip.red{background:var(--red-bg);color:var(--red)} .chip.yellow{background:var(--amber-bg);color:var(--amber)} .chip.green{background:var(--green-bg);color:var(--green)} .chip.acc{background:var(--sunk);color:var(--ink)}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;flex:none}
 .dot.red{background:var(--red)} .dot.yellow{background:#F2C200} .dot.green{background:var(--green)}
-textarea,input[type=text],input[type=date],select{display:block;width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface);line-height:1.6}
+textarea,input[type=text],input[type=date],select{display:block;width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--surface);line-height:1.6}
+textarea:focus,input:focus,select:focus{border-color:var(--accent);outline:0;box-shadow:0 0 0 3px rgba(24,24,27,.1)}
 textarea{resize:vertical}
-textarea.msg{background:#F6FBF3;min-height:0;field-sizing:content;resize:vertical}
-textarea.note{background:#FFFDF6;min-height:190px}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
-.btn{border:0;border-radius:8px;padding:8px 14px;background:var(--accent);color:var(--accent-ink);font-weight:700;white-space:nowrap}
-.btn.ghost{background:var(--sunk);color:var(--ink);font-weight:500}
+textarea.msg{background:var(--surface);min-height:0;field-sizing:content;resize:vertical}
+textarea.note{background:var(--surface);min-height:190px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.btn{border:1px solid var(--accent);border-radius:6px;padding:7px 14px;background:var(--accent);color:var(--accent-ink);font-weight:600;white-space:nowrap;transition:background .12s,border-color .12s}
+.btn:hover{background:#27272A}
+.btn.ghost{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:500}
+.btn.ghost:hover{background:var(--sunk);border-color:#D4D4D8}
 .btn:disabled{opacity:.45;cursor:default}
 .empty{color:var(--muted);font-size:14px;padding:10px 2px}
 .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:16px;align-items:start}
@@ -59,6 +64,7 @@ textarea.note{background:#FFFDF6;min-height:190px}
 .upd > input[type=checkbox]{width:16px;height:16px;margin-top:5px;accent-color:var(--accent)}
 .upd .src{grid-column:2;font-size:12.5px;color:var(--muted);background:var(--sunk);border-radius:6px;padding:2px 8px}
 .upd.off .what{text-decoration:line-through;color:var(--muted)}
+.duefix{display:inline-flex;gap:6px;align-items:center;margin-left:8px;vertical-align:middle}.duefix input{width:auto;padding:3px 8px}
 .orow{display:flex;gap:6px 8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);font-size:14px}.orow .ow{flex:1;min-width:200px}.orow .ob{display:flex;gap:6px}.orow .btn{padding:3px 10px;font-size:13px}
 .outs{margin:6px 0 4px 22px;padding:8px 12px;background:var(--sunk);border-radius:8px;font-size:13.5px} .outs ul{margin:4px 0 0;padding-left:18px} .outs > div + div{margin-top:8px}
 .thinking{display:flex;gap:10px;align-items:center;color:var(--muted);padding:30px 0;justify-content:center}
@@ -67,10 +73,12 @@ textarea.note{background:#FFFDF6;min-height:190px}
 @keyframes b{0%,100%{opacity:.25}50%{opacity:1}}
 .redline{font-size:13px;color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:6px 10px;margin-top:10px}
 .pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-.pills button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:14px;display:flex;align-items:center;gap:6px}
+.pills button{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:4px 12px;font-size:14px;display:flex;align-items:center;gap:6px}
+.pills button:hover{border-color:#A1A1AA}
 .pills button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+table tr:last-child td{border-bottom:0}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:12.5px;color:var(--muted);font-weight:500}
 td.nw{white-space:nowrap}
 tr.pick{cursor:pointer} tr.pick:hover td{background:var(--sunk)}
@@ -79,9 +87,10 @@ tr.pick{cursor:pointer} tr.pick:hover td{background:var(--sunk)}
 .tl li::before{content:"";position:absolute;left:-7px;top:6px;width:12px;height:12px;border-radius:50%;background:var(--surface);border:2px solid var(--accent)}
 .tl li.fresh::before{background:var(--accent)}
 .tl .t{font-size:12.5px;color:var(--muted)}
-.tl .who{font-weight:700;margin-right:6px}
-.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
-.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.tl .who{font-weight:600;margin-right:6px}
+.tl li{cursor:default}.tl .act{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}.tl li.full .act{display:inline}.tl li.long{cursor:pointer}.tl li.long:not(.full)::after{content:"展开";font-size:12.5px;color:var(--accent);text-decoration:underline}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px;box-shadow:var(--shadow)}
 .tile .n{font-size:28px;font-weight:700;line-height:1.2}
 .tile .l{font-size:13px;color:var(--muted)}
 .report{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fff;margin-top:10px}
@@ -102,12 +111,20 @@ tr.pick{cursor:pointer} tr.pick:hover td{background:var(--sunk)}
 .linkbtn{border:0;background:none;color:var(--accent);padding:0;font-size:13px;text-decoration:underline}
 .tl li.undone .act{text-decoration:line-through;color:var(--muted)}
 tr.open td{background:var(--sunk)}
-.edit{background:var(--sunk);border-radius:8px;padding:10px;margin:4px 0 8px}
+.edit{background:var(--sunk);border-radius:8px;padding:12px;margin:4px 0 8px}
 .grid3{display:grid;grid-template-columns:2fr 1fr 1.2fr;gap:8px;align-items:end}
 .steps td{padding:5px 4px} .steps select{min-width:70px} .steps input[type=text],.steps select,.steps input[type=date]{padding:5px 6px;font-size:14px}
 .err{color:var(--red);font-size:13px}
 label .muted{display:block}
-@media (max-width:820px){.grid3{grid-template-columns:1fr}}
+@media (max-width:820px){.grid3{grid-template-columns:1fr}
+  textarea,input[type=text],input[type=date],input[type=password],select{font-size:16px}
+  .btn{min-height:40px}.orow .btn{min-height:32px}
+  .card{padding:14px}
+  .steps,.steps tbody{display:block}.steps tr:first-child{display:none}
+  .steps tr{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(0,1.3fr);gap:6px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .steps td{border:0;padding:0}.steps td:nth-child(1){grid-row:1;align-self:center}.steps td:nth-child(2){grid-column:2/4;grid-row:1}.steps td:nth-child(3){grid-column:2;grid-row:2}.steps td:nth-child(4){grid-column:3;grid-row:2}
+  .schrow .nx{margin-left:0;flex-basis:100%;padding-left:20px}
+}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.thumb{position:relative}.thumb img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line, #ddd)}.thumb .x{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:#333;color:#fff;cursor:pointer;line-height:22px;padding:0}.filebtn{cursor:pointer}
 .sch{border-top:1px solid var(--line)}.reg + .sch{border-top:0}.schrow{display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap;width:100%;text-align:left;border:0;background:none;padding:11px 4px;font:inherit;color:inherit;cursor:pointer}.schrow:hover{background:var(--sunk)}.schrow .nx{margin-left:auto}.reg{font-size:13px;color:var(--muted);font-weight:600;margin:14px 0 2px;padding-bottom:4px;border-bottom:1px solid var(--line)}.reg .cnt{margin-left:6px;font-weight:400}
 .fold > summary{cursor:pointer;font-weight:600}.fold[open] > summary{margin-bottom:10px}
@@ -191,7 +208,7 @@ function summary(name){
 
 /* ---------- 留痕 ---------- */
 const sortedLogs = f => D.logs.filter(f);   // 服务器已按时间倒序
-const timeline = logs => logs.length ? `<ul class="tl">${logs.map(l => `<li class="${l.n > SEEN ? "fresh" : ""} ${l.undone ? "undone" : ""}"><div class="t">${md(l.date)} ${l.time} · ${esc(l.src)}${l.undone ? " · 已撤销" : ""}${l.n > SEEN ? ' · <b style="color:var(--accent)">刚刚</b>' : ""}</div><div><span class="who">${esc(l.who)}</span>${l._s && l.student ? `<span class="chip">${esc(l.student)}</span> ` : ""}<span class="act">${esc(l.act)}</span></div></li>`).join("")}</ul>` : `<div class="empty">没有记录。</div>`;
+const timeline = logs => logs.length ? `<ul class="tl">${logs.map(l => `<li class="${l.n > SEEN ? "fresh" : ""} ${l.undone ? "undone" : ""} ${l.act.length > 110 ? "long" : ""}"><div class="t">${md(l.date)} ${l.time} · ${esc(l.src)}${l.undone ? " · 已撤销" : ""}${l.n > SEEN ? ' · <b style="color:var(--accent)">刚刚</b>' : ""}</div><div><span class="who">${esc(l.who)}</span>${l._s && l.student ? `<span class="chip">${esc(l.student)}</span> ` : ""}<span class="act">${esc(l.act)}</span></div></li>`).join("")}</ul>` : `<div class="empty">没有记录。</div>`;
 
 /* ---------- 文案 ---------- */
 // 每种话术有几种说法：默认按事项固定选一种，顾问可以点"换一种说法"。
@@ -219,7 +236,7 @@ function overdueMsg(name, its, key){      // 逾期提醒：一件事写成一�
 }
 function parts(name){
   const its = D.items.filter(i => i.student === name);
-  return { done: its.filter(i => i.done && diff(TODAY, i.done) <= 7), open: its.filter(i => !i.done).sort((a,b) => diff(a.due, b.due)),
+  return { done: its.filter(i => i.done && !i.cancelled && diff(TODAY, i.done) <= 7), open: its.filter(i => !i.done).sort((a,b) => diff(a.due, b.due)),
            need: its.filter(i => !i.done && i.owner === "家长") };
 }
 function progressMsg(name){
@@ -486,10 +503,20 @@ function capRight(idle){      // AI 整理的结果：录入页和留痕页共�
       ${r.newItems.map((u, i) => `<div class="upd ${cp.off[i] ? "off" : ""}"><input type="checkbox" data-upd="${i}" ${cp.off[i] ? "" : "checked"}>
         <div class="what grid3"><input type="text" data-res="${i}" data-f="what" value="${esc(u.what)}">${ownerSel(u.owner, `data-res="${i}" data-f="owner"`)}<input type="date" data-res="${i}" data-f="due" value="${esc(u.due)}"></div>
         <div class="src">${u.sug ? "来信里没写日期的常见后续，需要就勾上并填日期" : `原话：“${esc(u.quote)}”`}${u.school ? `　归到：${esc(u.school)}` : ""}${u.due || u.sug ? "" : ' <b class="err">日期没写或看不清，请对照原件填</b>'}</div></div>`).join("")}` : ""}
-      ${r.found.length ? `<div class="head" style="margin-top:12px"><b>家长回复和进展</b></div>
-      ${r.found.map((u, i) => { const it = itemById(u.item); return `<label class="upd ${cp.offF[i] ? "off" : ""}"><input type="checkbox" data-updf="${i}" ${cp.offF[i] ? "" : "checked"}>
-        <div class="what"><span class="chip ${u.kind === "done" ? "green" : "acc"}">${u.kind === "done" ? "已完成" : u.kind === "note" ? "家长回复，只留痕" : "家长已回复"}</span> ${esc(it ? it.what : u.text)}</div>
-        <div class="src">原话：“${esc(u.quote)}”</div></label>`; }).join("")}` : ""}
+      ${r.found.length ? `<div class="head" style="margin-top:12px"><b>已有事项的变化</b></div>
+      ${r.found.map((u, i) => { const it = u.item ? itemById(u.item) : null, k = u.kind, sch = u.school ? schoolsOf(cp.student).find(x => x.school === u.school) : null, openN = sch ? sch.its.filter(x => !x.done).length : 0;
+        const tag = ({done: ["green", "已完成"], cancel: ["red", "取消这件事"], due: ["yellow", "改截止日"], owner: ["acc", "改负责人"], restore: ["green", "恢复这件事"], dropschool: ["red", "整所移除"], sdl: ["yellow", "学校截止日变了"], note: ["", u.by === "顾问" ? "顾问备注，只留痕" : (u.by || "家长") + "的话，只留痕"], replied: ["acc", "家长已回复"]})[k];
+        const fix = old => `<span class="duefix"><span class="muted small">${old ? md(old) : "未填"} 改为</span><input type="date" data-fd="${i}" value="${esc(u.due || "")}" aria-label="新截止日">${u.due ? "" : '<b class="err">新日期没说清，请填</b>'}</span>`;
+        const body = k === "cancel" && it ? `<s>${esc(it.what)}</s><span class="muted small">　原截止 ${md(it.due)}，确认后划掉并记进留痕</span>`
+          : k === "due" && it ? esc(it.what) + fix(it.due)
+          : k === "owner" && it ? `${esc(it.what)}<span class="muted small">　${esc(it.owner)} 改为</span> <b>${esc(u.owner)}</b>`
+          : k === "restore" && it ? `${esc(it.what)}<span class="muted small">　${md(it.cancelled)}取消过，恢复后截止日还是 ${md(it.due)}，需要的话再改</span>`
+          : k === "dropschool" ? `<s>${esc(u.school)}</s><span class="muted small">　不申请了，连同 ${sch ? sch.its.length : 0} 条事项整所移除</span>`
+          : k === "sdl" ? `${esc(u.school)}${fix(sch && sch.sdl)}<span class="muted small">　${openN} 条未完成的事项按同样天数一起调整</span>`
+          : esc(it ? it.what : u.text);
+        return `<div class="upd ${cp.offF[i] ? "off" : ""}"><input type="checkbox" data-updf="${i}" ${cp.offF[i] ? "" : "checked"} aria-label="采用这一条">
+        <div class="what"><span class="chip ${tag[0]}">${tag[1]}</span> ${body}</div>
+        <div class="src">原话：“${esc(u.quote)}”</div></div>`; }).join("")}` : ""}
       ${r.transcript ? `<details class="small" style="margin-top:10px"><summary>图片里识别出的文字（请对照图片核对，原话都从这里来）</summary><div class="src" style="white-space:pre-wrap">${esc(r.transcript)}</div></details>` : ""}
       ${!r.newItems.length && !r.found.length && !d ? `<div class="empty">没找到明确的事项或回复。可以用下面的手动添加。</div>` : ""}
       ${r.dropped ? `<div class="muted small">另有 ${r.dropped} 条因为原话对不上原文，已自动丢掉。</div>` : ""}
@@ -505,7 +532,7 @@ const statTiles = (label, rows) => { const cnt = l => rows.filter(r => r.sm.item
   return `<div class="tiles">
     <div class="tile"><div class="n">${rows.length}</div><div class="l">${label}</div></div>
     <div class="tile"><div class="n" style="color:var(--red)">${cnt("red")}</div><div class="l">逾期</div></div>
-    <div class="tile"><div class="n" style="color:var(--amber)">${cnt("yellow")}</div><div class="l">临期</div></div>
+    <div class="tile"><div class="n" style="color:#F2C200">${cnt("yellow")}</div><div class="l">临期</div></div>
     <div class="tile"><div class="n" style="color:var(--green)">${cnt("green")}</div><div class="l">待办</div></div></div>`; };
 
 function bulkCard(){
@@ -589,7 +616,7 @@ student(){
   const all = D.items.filter(i => i.student === name).sort((a,b) => (!!a.done - !!b.done) || diff(a.due, b.due));
   const sch = schoolsOf(name), other = all.filter(i => !i.school);
   const p = parts(name), gen = S.gen && S.gen.student === name ? S.gen : null;
-  const status = it => it.done ? `<span class="chip green">${md(it.done)}完成</span>` : overdue(it) ? `<span class="chip red">逾期</span>` : isFam(it) && !it.agreed ? `<span class="chip">未发约定</span>` : `<span class="chip ${light(it)}">${LN[light(it)]}</span>`;
+  const status = it => it.cancelled ? `<span class="chip">${md(it.cancelled)}取消</span>` : it.done ? `<span class="chip green">${md(it.done)}完成</span>` : overdue(it) ? `<span class="chip red">逾期</span>` : isFam(it) && !it.agreed ? `<span class="chip">未发约定</span>` : `<span class="chip ${light(it)}">${LN[light(it)]}</span>`;
   const editRow = it => `<tr class="open"><td colspan="5"><div class="edit">
       <div class="grid3"><label><span class="muted small">事项</span><input type="text" id="ed_what" value="${esc(it.what)}"></label>
         <label><span class="muted small">负责</span>${ownerSel(it.owner, 'id="ed_owner"')}</label>
@@ -597,14 +624,14 @@ student(){
       <label style="display:block;margin-top:8px"><span class="muted small">改动原因（记进留痕，可不填）</span><input type="text" id="ed_reason" placeholder="比如：学校推迟了推荐信截止"></label>
       <div class="row"><button class="btn" data-act="edititem" data-id="${it.id}">保存</button>
         ${isFam(it) && it.agreed && !it.replied ? `<button class="btn ghost" data-act="replied" data-id="${it.id}">家长回复了</button>` : ""}
-        <button class="btn ghost" data-act="deleteitem" data-id="${it.id}">删除</button><button class="linkbtn" data-act="openitem" data-id="">收起</button></div></div></td></tr>`;
+        ${it.cancelled ? `<button class="btn ghost" data-act="restoreitem" data-id="${it.id}">恢复这件事</button>` : it.done ? "" : `<button class="btn ghost" data-act="cancelitem" data-id="${it.id}">取消这件事</button>`}<button class="linkbtn" data-act="deleteitem" data-id="${it.id}">录错了，删除</button><button class="linkbtn" data-act="openitem" data-id="">收起</button></div></div></td></tr>`;
   const itemTable = (its, grouped) => `<table><tr><th></th><th>事项</th><th>负责</th><th>截止</th><th>状态</th></tr>
-      ${its.map(it => `<tr class="pick" data-act="openitem" data-id="${it.id}"><td class="ck">${it.done ? `<span class="ckb on" aria-label="已完成">✓</span>` : `<button class="ckb" data-act="done" data-id="${it.id}" aria-label="标为已完成" title="标为已完成"></button>`}</td><td>${esc(grouped ? shortWhat(it) : it.what)}</td><td class="nw">${esc(it.owner)}</td><td class="nw">${md(it.due)}</td><td class="nw">${status(it)}</td></tr>${S.open === it.id ? editRow(it) : ""}`).join("")}</table>`;
+      ${its.map(it => `<tr class="pick" data-act="openitem" data-id="${it.id}"><td class="ck">${it.cancelled ? "" : it.done ? `<span class="ckb on" aria-label="已完成">✓</span>` : `<button class="ckb" data-act="done" data-id="${it.id}" aria-label="标为已完成" title="标为已完成"></button>`}</td><td>${it.cancelled ? `<s class="muted">${esc(grouped ? shortWhat(it) : it.what)}</s>` : esc(grouped ? shortWhat(it) : it.what)}</td><td class="nw">${esc(it.owner)}</td><td class="nw">${md(it.due)}</td><td class="nw">${status(it)}</td></tr>${S.open === it.id ? editRow(it) : ""}`).join("")}</table>`;
   const block = (key, title, meta, its) => { const open = its.filter(i => !i.done).sort((a,b) => diff(a.due, b.due)), on = S.openSchool === key, isSchool = key !== "__other";
     const outs = isSchool ? (D.outcomes || []).filter(o => o.student === name && o.school === key) : [], lastRes = [...outs].reverse().find(o => o.result);
     const lt = open.length ? open.map(light).sort((a,b) => rank[a] - rank[b])[0] : "green";
     return `<div class="sch"><button class="schrow" data-openschool="${esc(key)}" aria-expanded="${on}"><span class="dot ${lt}"></span><b>${esc(title)}</b>
-        ${meta ? `<span class="muted small">${meta}</span>` : ""}${lastRes ? `<span class="chip ${lastRes.result === "拒绝" ? "red" : lastRes.result === "候补" || lastRes.result === "延期" ? "yellow" : "green"}">${esc(lastRes.result)}</span>` : ""}<span class="chip ${open.length ? "" : "green"}">${its.length - open.length}/${its.length} 完成</span>
+        ${meta ? `<span class="muted small">${meta}</span>` : ""}${lastRes ? `<span class="chip ${lastRes.result === "拒绝" ? "red" : lastRes.result === "候补" || lastRes.result === "延期" ? "yellow" : "green"}">${esc(lastRes.result)}</span>` : ""}<span class="chip ${open.length ? "" : "green"}">${its.filter(i => i.done && !i.cancelled).length}/${its.filter(i => !i.cancelled).length} 完成</span>
         <span class="muted small nx">${open.length ? "下一件：" + esc(isSchool ? shortWhat(open[0]) : open[0].what) + "，" + md(open[0].due) : "全部完成"}</span></button>
       ${on && outs.length ? `<div class="outs">${outs.map(o => `<div><b>${esc(o.result || DOCNAME[o.kind])}</b>${o.program ? `　${esc(o.program)}` : ""}<span class="muted small">　${md(o.date)}记录</span>
           ${o.conditions.length ? `<ul>${o.conditions.map(c => `<li>${esc(c.text)}${c.due ? `<span class="muted small">　${md(c.due)}前</span>` : ""}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>` : ""}
@@ -765,6 +792,9 @@ async function act(name, ds, el){
     case "previewbulk": { const t = val("bulk_in"); if (!t.trim()) return toast("先把表格粘贴进来"); S.bulk = {open: true, text: t, prev: parseBulk(t)}; return render(); }
     case "runbulk": { const p = S.bulk.prev; await runBulk(p); if (p.students.length) S.pick = p.students[0].name; else if (p.rows.length) S.pick = p.rows[0].name;
       S.bulk = {open: false, text: "", prev: null}; S.undo = null; render(); return toast(`已导入 ${p.students.length} 个学生、${p.rows.length} 所学校`); }
+    case "cancelitem": { const reason = prompt(`取消「${it.what}」？事项会划掉并留在原处。可以写一下原因（会记进留痕）：`); if (reason === null) return;
+      S.open = null; return api("cancelitem", {item: it.id, reason}, `取消 ${it.what}`); }
+    case "restoreitem": S.open = null; return api("restoreitem", {item: it.id}, `恢复 ${it.what}`);
     case "deleteitem": { const reason = prompt(`删除「${it.what}」？请写一下原因（会记进留痕）：`); if (reason === null) return;
       S.open = null; return api("deleteitem", {item: it.id, reason}, `删除 ${it.what}`); }
     case "gen": S.gen = {student: S.pick, k: ds.k}; return render();
@@ -792,11 +822,13 @@ async function act(name, ds, el){
       if (miss >= 0){ const box = document.querySelector(`[data-res="${miss}"][data-f="${r.newItems[miss].due ? "what" : "due"}"]`);      // 直接跳到没填的那一格
         if (box){ box.scrollIntoView({block: "center"}); box.focus(); box.style.borderColor = "var(--red)"; }
         return toast("这一条还没填日期：填上，或者取消勾选"); }
+      const nod = r.found.findIndex((u, i) => !cp.offF[i] && (u.kind === "due" || u.kind === "sdl") && !u.due);
+      if (nod >= 0){ const box = document.querySelector(`[data-fd="${nod}"]`); if (box){ box.scrollIntoView({block: "center"}); box.focus(); box.style.borderColor = "var(--red)"; } return toast("新的截止日还没填：填上，或者取消勾选"); }
       const d = r.doc && !cp.offD ? r.doc : null;
       if (d && !d.school.trim()) return toast("请填学校名");
       if (on.length) await api("additems", {student: sid, items: on.map(u => ({what: u.what, owner: u.owner, due: u.due, school: u.school, quote: u.quote})), from: d ? "AI 识别学校来信" : cp.imgs.length ? "AI 整理笔记/聊天/图片" : "AI 整理笔记/聊天"}, `${on.length} 条事项`);
       if (d) await api("outcome", {student: sid, school: d.school.trim(), kind: d.type, result: d.result, program: d.program, conditions: d.conditions.filter((c, i) => !cp.offC[i]).map(c => ({text: c.text, due: c.due})), quote: d.quote}, `${d.school} ${d.result || DOCNAME[d.type]}`);
-      if (fd.length) await api("found", {student: sid, found: fd});
+      if (fd.length) await api("found", {student: sid, found: fd}, fd.length === 1 && fd[0].kind !== "note" ? ({due: "改截止日", cancel: "取消", done: "完成", replied: "家长回复", owner: "改负责人", restore: "恢复", dropschool: "移除", sdl: "改学校截止日"})[fd[0].kind] + " " + (fd[0].school || (itemById(fd[0].item) || {}).what) : undefined);
       cp.res = null; cp.text = ""; cp.imgs = []; render(); return toast("已写入"); }
     case "vary": S.v[ds.key] = (S.v[ds.key] || 0) + 1; return render();
     case "toggleadd": S.addOpen = !S.addOpen; S.add = blankAdd(); return render();
@@ -895,6 +927,7 @@ document.addEventListener("paste", e => {
   const files = [...(e.clipboardData ? e.clipboardData.items : [])].filter(i => i.kind === "file" && i.type.startsWith("image/")).map(i => i.getAsFile());
   if (files.length){ e.preventDefault(); addImgs(files); }
 });
+document.addEventListener("click", e => { const li = e.target.closest(".tl li.long"); if (li && !e.target.closest("button,a")) li.classList.toggle("full"); });
 document.addEventListener("toggle", e => { const k = e.target.dataset && e.target.dataset.fold; if (k) S.fold[k] = e.target.open; }, true);
 document.addEventListener("input", e => { if (e.target.id === "school"){ const box = document.getElementById("schoolsug"); if (box) box.innerHTML = sugHtml(e.target.value, true); } });
 document.addEventListener("pointerdown", e => { const b = e.target.closest("#schoolsug [data-memschool]");          // 输入框还没失去焦点时点建议：直接选中
@@ -905,6 +938,7 @@ function onField(e, final){
     if (ds.k === "deadline" || ds.k === "croundIn") S.add.key = ds.k === "croundIn" ? "" : S.add.key;
     if (final && (ds.r !== undefined || ds.k === "region" || ds.k === "pastDone")) render(); return; }
   if (ds.step !== undefined){ const s = S.add.steps[+ds.step]; s[ds.f] = v; if (ds.f === "what") s.custom = true; if (ds.f === "due") s.edited = true; if (final && (ds.f === "due" || ds.f === "on")) render(); return; }
+  if (ds.fd !== undefined){ S.cap.res.found[+ds.fd].due = v; return; }
   if (ds.res !== undefined){ S.cap.res.newItems[+ds.res][ds.f] = v; return; }
   if (ds.doc !== undefined){ S.cap.res.doc[ds.doc] = v; if (final && ds.doc === "result") render(); return; }
   if (ds.row !== undefined){ S.cap.rows[+ds.row][ds.f] = v; return; }
