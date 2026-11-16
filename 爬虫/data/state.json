@@ -21,7 +21,7 @@
    "12 November 2026",
    "7 January 2027"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://join.hkust.edu.hk/node/7": {
   "etag": "",
@@ -31,7 +31,7 @@
    "Nov. 26, 2026",
    "Oct. 2, 2026"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://www.polyu.edu.hk/saso/docdrive/Public/AdmissionLeaflets/infosheet_non_jupas_2027.pdf": {
   "etag": "",
@@ -42,7 +42,7 @@
    "21 Jan 2026",
    "23 SEP 2026"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://www.cityu.edu.hk//admo/news/2027_Flyer_Non-JUPAS_Admission.pdf": {
   "etag": "\"048799af74add1:0\"",
@@ -54,7 +54,7 @@
  "https://admissions.hkbu.edu.hk/ug/intl_prospectus": {
   "etag": "",
   "dates": [],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://ln.edu.hk/admissions/ug/overseas/apply/admission-requirements": {
   "etag": "",
@@ -65,17 +65,17 @@
    "8 Oct 2026",
    "Oct 8, 2026"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://www.apply.eduhk.hk/ug/nonlocal_dates": {
-  "etag": "\"1794635790\"",
+  "etag": "\"1794799632\"",
   "dates": [
    "16 November 2026",
    "5 October 2026",
    "6 January 2027",
    "7 May 2027"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://www.sydney.edu.au/study/how-to-apply/application-dates.html": {
   "etag": "",
@@ -83,7 +83,7 @@
    "2 August 2027",
    "22 February 2027"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://unsw.edu.au/study/international-students/admissions-info": {
   "etag": "",
@@ -131,20 +131,20 @@
    "8 September 2027",
    "9 September 2027"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://study.anu.edu.au/apply/international-applications": {
-  "etag": "W/\"1794635708\"",
+  "etag": "W/\"1794799321\"",
   "dates": [
    "15 December 2026",
    "15 December 2027",
    "15 May 2027",
    "15 May 2028"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://study.uq.edu.au/admissions/undergraduate/submit-your-application": {
-  "etag": "W/\"1794629927\"",
+  "etag": "W/\"1794799638\"",
   "dates": [
    "1 October 2026",
    "14 January 2027",
@@ -155,7 +155,7 @@
    "7 December 2026",
    "7 January 2027"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://www.uwa.edu.au/study/How-to-apply/Undergraduate-international": {
   "etag": "W/\"15eu9dl2zjj3sqx\"",
@@ -178,14 +178,14 @@
  "https://adelaide.edu.au/study/international-students/how-to-apply/": {
   "etag": "",
   "dates": [],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://www.ucas.com/events/2027-entry-deadline-for-all-undergraduate-courses-except-those-with-a-15-october-deadline-475546": {
   "etag": "",
   "dates": [
    "13 January 2027"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  },
  "https://imperial.ac.uk/study/apply/undergraduate/process/deadlines/": {
   "etag": "",
@@ -207,6 +207,6 @@
    "6 January 2027",
    "8 January 2027"
   ],
-  "checked_at": "2026-11-14T05:56Z"
+  "checked_at": "2026-11-16T03:26Z"
  }
 }

@@ -1,5 +1,27 @@
 # 变化记录
 
+## 2026-11-16T03:26Z
+
+- Common App 要求总表：文件没有变化，跳过。
+- UCAS 1 月截止日：日期没有变化。
+- 帝国理工截止日页（UCAS 日期参照）：日期没有变化。
+- 香港大学 HKU：网页没有变化。
+- 香港中文大学 CUHK：日期没有变化。
+- 香港科技大学 HKUST：日期没有变化。
+- 香港理工大学 PolyU：日期没有变化。
+- 香港城市大学 CityU：网页没有变化。
+- 香港浸会大学 HKBU：日期没有变化。（页面上读不到日期，需要人工定期查看）
+- 岭南大学 Lingnan：日期没有变化。
+- 香港教育大学 EdUHK：日期没有变化。
+- University of Sydney：日期没有变化。
+- UNSW Sydney：日期没有变化。
+- Australian National University：日期没有变化。
+- University of Queensland：日期没有变化。
+- University of Western Australia：网页没有变化。
+- University of Melbourne：这次没抓到（HTTPError 403）。旧数据未改动，这个网站拒绝程序访问的话需要人工定期查看。
+- Monash University：这次没抓到（HTTPError 403）。旧数据未改动，这个网站拒绝程序访问的话需要人工定期查看。
+- Adelaide University：日期没有变化。（页面上读不到日期，需要人工定期查看）
+
 ## 2026-11-14T05:56Z
 
 - Common App 要求总表：文件没有变化，跳过。
