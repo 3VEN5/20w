@@ -1,0 +1,746 @@
+"""申请进度助手 · 试用版后台。
+
+启动：  uvicorn server:app --host 127.0.0.1 --port 8000
+建机构： python manage.py new-agency
+所有操作都走 POST /api/act（字段 op 是操作名），后台执行后写留痕，再把最新数据整份返回给页面。
+"""
+import csv, io, json, os, re, secrets, time
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+
+import ai, db
+ai.SYSTEM_PROMPT += "\n未来承诺（如‘我今晚发你’）不是已经完成，也不是学校变更截止日。只作为发言人的 note；绝不推断已收到或已递交。"
+
+HERE = Path(__file__).parent
+STATIC = HERE.parent / "app" / "static"
+DEMO = os.environ.get("ROADSHOW_DEMO") == "1"
+DAY1, DAY2 = "2026-11-16", "2026-11-17"
+SCHOOL = "明川大学（虚构）"
+MAIL = "请林同学于 2026-11-20 前通过申请系统上传英文成绩单。"
+PROMISE = "我今晚把英文成绩单发给您。"
+demo_day = DAY1
+if DEMO:
+    import tempfile
+    if db.DB_PATH.parent.parent.resolve() != Path(tempfile.gettempdir()).resolve() or not db.DB_PATH.parent.name.startswith("20w-fiction-"):
+        raise RuntimeError("演示只允许使用独立临时数据库")
+    db.now = lambda: datetime.fromisoformat(demo_day + ("T09:00" if demo_day == DAY2 else "T16:00")).replace(tzinfo=db.TZ)
+DEADLINES_JS = Path(os.environ.get("DEADLINES_JS", HERE.parent / "爬虫" / "data" / "deadlines_web.js"))
+SECURE_COOKIE = os.environ.get("SECURE_COOKIE", "1") == "1"   # 本地调试用 http 时设成 0
+SESSION_DAYS = 30
+OWNERS = {"学生", "家长", "学校", "机构"}
+FAM = {"学生", "家长"}
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+db.init()
+with db.connect() as con:
+    con.execute("""CREATE TABLE IF NOT EXISTS followup (
+        item_id INTEGER PRIMARY KEY REFERENCES item(id), promise TEXT NOT NULL, promised_on TEXT NOT NULL,
+        review_on TEXT NOT NULL, last_checked TEXT)""")
+
+
+# ------------------------------------------------------------------ 工具
+def bad(msg, code=400):
+    raise HTTPException(code, msg)
+
+
+def txt(v, name, maxlen=200, required=True):
+    v = str(v or "").strip()
+    if required and not v:
+        bad(f"{name}不能为空")
+    if len(v) > maxlen:
+        bad(f"{name}太长了（最多 {maxlen} 字）")
+    return v
+
+
+def date(v, name="日期"):
+    v = str(v or "").strip()
+    if not DATE_RE.match(v):
+        bad(f"{name}格式不对")
+    try:
+        datetime.strptime(v, "%Y-%m-%d")
+    except ValueError:
+        bad(f"{name}不存在")
+    return v
+
+
+def md(d):
+    return f"{int(d[5:7])}月{int(d[8:10])}日"
+
+
+# ------------------------------------------------------------------ 登录
+_fails = {}   # 登录失败次数，防止猜密码
+
+
+def current_user(request: Request):
+    tok = request.cookies.get("roadshow_sid")
+    if not tok:
+        bad("请先登录", 401)
+    with db.connect() as con:
+        u = con.execute("""SELECT u.*, a.name AS agency FROM session s JOIN user u ON u.id = s.user_id JOIN agency a ON a.id = u.agency_id
+                           WHERE s.token = ? AND s.expires > ? AND u.active = 1""", (tok, db.stamp())).fetchone()
+    if not u:
+        bad("登录已过期，请重新登录", 401)
+    return dict(u)
+
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    # 写操作必须带这个请求头：别的网站伪造的表单提交带不上它
+    if request.method == "POST" and request.url.path.startswith("/api/") and request.headers.get("x-app") != "1":
+        return Response("forbidden", status_code=403)
+    resp = await call_next(request)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "same-origin"
+    resp.headers["X-Frame-Options"] = "DENY"
+    return resp
+
+
+@app.post("/api/login")
+async def login(request: Request, response: Response):
+    body = await request.json()
+    lg, pw = str(body.get("login", "")).strip(), str(body.get("password", ""))
+    ip = request.client.host if request.client else "?"
+    recent = [t for t in _fails.get(ip, []) if t > time.time() - 900]
+    if len(recent) >= 10:
+        bad("尝试次数太多，请 15 分钟后再试", 429)
+    with db.connect() as con:
+        u = con.execute("SELECT * FROM user WHERE login = ? AND active = 1", (lg,)).fetchone()
+        if not u or not db.check_pw(pw, u["pw"]):
+            _fails[ip] = recent + [time.time()]
+            bad("账号或密码不对", 401)
+        tok = secrets.token_urlsafe(32)
+        exp = (db.now() + timedelta(days=SESSION_DAYS)).strftime("%Y-%m-%d %H:%M")
+        con.execute("DELETE FROM session WHERE expires < ?", (db.stamp(),))
+        con.execute("INSERT INTO session VALUES (?,?,?)", (tok, u["id"], exp))
+    response.set_cookie("roadshow_sid", tok, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", secure=SECURE_COOKIE)
+    return {"ok": True}
+
+
+@app.post("/api/logout")
+def logout(request: Request, response: Response):
+    with db.connect() as con:
+        con.execute("DELETE FROM session WHERE token = ?", (request.cookies.get("roadshow_sid", ""),))
+    response.delete_cookie("roadshow_sid")
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ 页面和静态文件
+@app.get("/")
+def index(request: Request):
+    try:
+        current_user(request)
+    except HTTPException:
+        return RedirectResponse("/login")
+    return FileResponse(HERE / "static" / "index.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/login")
+def login_page():
+    if DEMO:
+        return HTMLResponse("""<meta charset=utf-8><title>20w · 补件路演</title><main style="max-width:38rem;margin:15vh auto;font:18px/1.7 system-ui">
+        <small>20w / 虚构案例</small><h1>从学校来信，到次日接手</h1><p>用王老师的账号进入。演示使用本机独立临时数据库和固定离线邮件样例。</p>
+        <button onclick="fetch('/api/demo/start',{method:'POST',headers:{'X-App':'1'}}).then(r=>r.ok?location.assign('/'):alert('启动失败'))">进入顾问工作台</button></main>""")
+    return FileResponse(STATIC / "login.html")
+
+
+@app.get("/workbench.js")
+def workbench_js():
+    return FileResponse(HERE / "static" / "workbench.js", media_type="text/javascript")
+
+
+@app.get("/config.js")
+def config_js():
+    return FileResponse(STATIC / "config.js", media_type="text/javascript")
+
+
+@app.get("/pdf.min.js")
+def pdf_js():
+    return FileResponse(STATIC / "pdf.min.js", media_type="text/javascript", headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/pdf.worker.min.js")
+def pdf_worker_js():
+    return FileResponse(STATIC / "pdf.worker.min.js", media_type="text/javascript", headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/deadlines.js")
+def deadlines_js(u=Depends(current_user)):
+    if not DEADLINES_JS.exists():
+        return Response("window.DEADLINES = {schools:{}, info:{}};", media_type="text/javascript")
+    return FileResponse(DEADLINES_JS, media_type="text/javascript")
+
+
+# ------------------------------------------------------------------ 读数据
+def state(u):
+    aid, today = u["agency_id"], db.today()
+    with db.connect() as con:
+        users = [dict(r) for r in con.execute("SELECT id, name, login, role, active FROM user WHERE agency_id = ? ORDER BY id", (aid,))]
+        uname = {x["id"]: x["name"] for x in users}
+        studs = [dict(r) for r in con.execute("""SELECT s.*, EXISTS(SELECT 1 FROM log l WHERE l.student_id=s.id AND l.src='交接') AS handed
+            FROM student s WHERE agency_id=? AND archived=0 AND (?='owner' OR consultant_id=?) ORDER BY id""", (aid,u["role"],u["id"]))]
+        demo_transferred = DEMO and bool(con.execute("SELECT 1 FROM student WHERE id=1 AND consultant_id=2").fetchone())
+        sname = {s["id"]: s["name"] for s in studs}
+        items = [dict(r) for r in con.execute("SELECT * FROM item WHERE agency_id = ? AND deleted = 0 ORDER BY due, id", (aid,))]
+        chases = {}
+        for r in con.execute("SELECT c.item_id, c.date FROM chase c JOIN item i ON i.id = c.item_id WHERE i.agency_id = ? ORDER BY c.date, c.id", (aid,)):
+            chases.setdefault(r["item_id"], []).append(r["date"])
+        logs = [dict(r) for r in con.execute("""SELECT l.* FROM log l LEFT JOIN student s ON s.id=l.student_id WHERE l.agency_id=?
+                AND (?='owner' OR (s.consultant_id=? AND s.archived=0)) ORDER BY l.id DESC LIMIT 3000""", (aid,u["role"],u["id"]))]
+        mem = {}
+        for r in con.execute("SELECT * FROM custom_school WHERE agency_id = ? ORDER BY school", (aid,)):
+            m = mem.setdefault(r["school"], {"d": {}, "by": r["by"], "on": r["on_date"], "src": r["src"], "region": r["region"]})
+            m["d"][r["round"]] = r["date"]
+        outcomes = [dict(r) for r in con.execute("SELECT * FROM outcome WHERE agency_id = ? AND deleted = 0 ORDER BY id", (aid,))]
+        follow = {r["item_id"]: dict(r) for r in con.execute("SELECT f.* FROM followup f JOIN item i ON i.id=f.item_id WHERE i.agency_id=? AND i.deleted=0", (aid,))}
+    cons_of = {s["id"]: uname.get(s["consultant_id"], "") for s in studs}
+    undo_after = (db.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M")
+    return {
+        "me": {"id": u["id"], "name": u["name"], "role": u["role"]}, "agency": u["agency"], "today": today, "ai": DEMO or ai.enabled(), "aiImages": not DEMO and ai.enabled() and ai.images_enabled(),
+        "demo": {"mail": MAIL, "promise": PROMISE, "day1": DAY1, "day2": DAY2, "transferred": demo_transferred} if DEMO else None,
+        "users": [{k: x[k] for k in ("id", "name", "role", "active")} | ({"login": x["login"]} if u["role"] == "owner" else {}) for x in users],
+        "students": [{"id": s["id"], "name": s["name"], "parent": s["parent"], "consultant": cons_of[s["id"]], "consultant_id": s["consultant_id"], "handed": bool(s["handed"])} for s in studs],
+        "items": [{"id": i["id"], "student": sname[i["student_id"]], "what": i["what"], "owner": i["owner"], "due": i["due"], "created": i["created"],
+                   "agreed": i["agreed"], "replied": i["replied"], "replyText": i["reply_text"], "done": i["done"], "cancelled": i["cancelled"], "school": i["school"],
+                   "round": i["round"] or "", "sdl": i["sdl"] or "", "region": i["region"] or "", "rolling": bool(i["rolling"]),
+                   "chases": chases.get(i["id"], []), "follow": follow.get(i["id"])} for i in items if i["student_id"] in sname],
+        "logs": [{"id": l["id"], "date": l["at"][:10], "time": l["at"][11:], "who": l["who"], "src": l["src"], "act": l["act"],
+                  "student": sname.get(l["student_id"], ""), "consultant": cons_of.get(l["student_id"], ""), "undone": bool(l["undone"]),
+                  "canUndo": bool(l["undo"]) and not l["undone"] and l["user_id"] == u["id"] and l["at"] >= undo_after} for l in logs],
+        "memory": mem,
+        "outcomes": [{"id": o["id"], "student": sname[o["student_id"]], "school": o["school"], "kind": o["kind"], "result": o["result"], "program": o["program"],
+                      "conditions": json.loads(o["conditions"]), "date": o["on_date"], "by": o["by"]} for o in outcomes if o["student_id"] in sname],
+    }
+
+
+@app.get("/api/state")
+def get_state(u=Depends(current_user)):
+    return state(u)
+
+
+# ------------------------------------------------------------------ 写操作
+class Ctx:
+    def __init__(self, con, u):
+        self.con, self.u, self.aid, self.today = con, u, u["agency_id"], db.today()
+
+    def student(self, sid):
+        s = self.con.execute("SELECT * FROM student WHERE id = ? AND agency_id = ? AND archived = 0", (sid, self.aid)).fetchone()
+        if s:
+            responsible(self,s)
+        return s or bad("找不到这个学生")
+
+    def item(self, iid):
+        i = self.con.execute("SELECT * FROM item WHERE id = ? AND agency_id = ? AND deleted = 0", (iid, self.aid)).fetchone()
+        if i:
+            self.student(i["student_id"])
+        return i or bad("找不到这个事项")
+
+    def log(self, student_id, src, act, who=None, undo=None):
+        self.con.execute("INSERT INTO log (agency_id, student_id, at, user_id, who, src, act, undo) VALUES (?,?,?,?,?,?,?,?)",
+                         (self.aid, student_id, db.stamp(), self.u["id"], who or self.u["name"], src, act, json.dumps(undo) if undo else None))
+
+    def add_item(self, sid, what, owner, due, school=None, rnd=None, sdl=None, region=None, rolling=False):
+        what, due = txt(what, "事项", 120), date(due, "截止日")
+        if owner not in OWNERS:
+            bad("负责人只能是学生、家长、学校或机构")
+        cur = self.con.execute("INSERT INTO item (agency_id, student_id, what, owner, due, created, school, round, sdl, region, rolling) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                               (self.aid, sid, what, owner, due, self.today, school, rnd, sdl, region, int(bool(rolling))))
+        return cur.lastrowid
+
+
+def owner_only(c):
+    if c.u["role"] != "owner":
+        bad("只有老板账号能做这个操作", 403)
+
+
+def a_chased(c, b):
+    it = c.item(b.get("item"))
+    cid = c.con.execute("INSERT INTO chase (item_id, date) VALUES (?,?)", (it["id"], c.today)).lastrowid
+    n = c.con.execute("SELECT COUNT(*) FROM chase WHERE item_id = ?", (it["id"],)).fetchone()[0]
+    school = it["owner"] == "学校"
+    c.log(it["student_id"], "跟进" if school else "提醒", f"{'跟进学校' if school else '已发提醒'}（第 {n} 次）：{it['what']}", undo={"t": "chase", "id": cid})
+
+
+def a_done(c, b):
+    it = c.item(b.get("item"))
+    if it["done"]:
+        bad("这件事已经是完成状态")
+    c.con.execute("UPDATE item SET done = ? WHERE id = ?", (c.today, it["id"]))
+    c.log(it["student_id"], "完成", f"完成「{it['what']}」（{c.u['name']}记录）", who=c.u["name"] if it["owner"] == "机构" else it["owner"], undo={"t": "done", "id": it["id"]})
+
+
+def a_agreed(c, b):
+    s = c.student(b.get("student"))
+    rows = c.con.execute("SELECT id, what FROM item WHERE student_id = ? AND deleted = 0 AND done IS NULL AND agreed IS NULL AND owner IN ('学生','家长')", (s["id"],)).fetchall()
+    if "ids" in b:
+        ids = set(b["ids"])
+        rows = [r for r in rows if r["id"] in ids]
+    if not rows:
+        bad("没有需要发约定的事项")
+    c.con.executemany("UPDATE item SET agreed = ? WHERE id = ?", [(c.today, r["id"]) for r in rows])
+    c.log(s["id"], "约定", "已发约定给家长：" + "、".join(f"「{r['what']}」" for r in rows), undo={"t": "agreed", "ids": [r["id"] for r in rows]})
+
+
+def a_replied(c, b):
+    it = c.item(b.get("item"))
+    d = date(b.get("date") or c.today)
+    t = txt(b.get("text"), "家长原话", 300, required=False)
+    c.con.execute("UPDATE item SET replied = ?, reply_text = ? WHERE id = ?", (d, t or None, it["id"]))
+    parent = c.student(it["student_id"])["parent"]
+    c.log(it["student_id"], "微信回复", f"家长 {md(d)} 回复{'：“' + t + '”' if t else ''}（{c.u['name']}记录）", who=parent,
+          undo={"t": "replied", "id": it["id"], "old": [it["replied"], it["reply_text"]]})
+
+
+def a_parentnote(c, b):
+    s = c.student(b.get("student"))
+    t = txt(b.get("text"), "家长原话", 300)
+    c.log(s["id"], "微信回复", f"家长回复：“{t}”（{c.u['name']}记录，不对应具体事项）", who=s["parent"], undo={"t": "none"})
+
+
+def a_sent(c, b):
+    s = c.student(b.get("student"))
+    c.log(s["id"], "反馈家长", f"已发{txt(b.get('what'), '内容', 20)}给家长", undo={"t": "none"})
+
+
+def a_additems(c, b):
+    s = c.student(b.get("student"))
+    items = b.get("items") or bad("没有要写入的事项")
+    ids = [c.add_item(s["id"], x.get("what"), x.get("owner"), x.get("due"), school=txt(x.get("school"), "学校", 100, required=False) or None) for x in items[:50]]
+    label = txt(b.get("from") or "手动添加", "来源", 30)
+    quotes = [x.get("quote") for x in items if x.get("quote")]
+    c.log(s["id"], "录入", f"{label}，确认 {len(ids)} 条事项：" + "；".join(f"{x['what']}（{x['owner']}，{md(x['due'])}）" for x in items[:50])
+          + (f"。原话：" + " / ".join(f"“{q[:80]}”" for q in quotes) if quotes else ""), undo={"t": "items", "ids": ids})
+
+
+DOC_KINDS = {"offer": "录取通知", "补材料": "补材料通知", "面试": "面试通知", "拒信": "拒信", "候补": "候补通知", "其他": "学校来信"}
+
+
+def a_outcome(c, b):
+    """学校来信：录取结果和条件。顾问核对后才记。只存结果、条件和原话，不存原件。"""
+    s = c.student(b.get("student"))
+    school, kind = txt(b.get("school"), "学校", 100), b.get("kind")
+    if kind not in DOC_KINDS:
+        bad("来信类型不对")
+    result = b.get("result") if b.get("result") in ai.DOC_RESULTS else ""
+    program = txt(b.get("program"), "专业", 120, required=False)
+    conds = [{"text": txt(x.get("text"), "条件", 200), "due": date(x["due"], "条件截止日") if x.get("due") else ""} for x in (b.get("conditions") or [])[:10]]
+    quote = txt(b.get("quote"), "原话", 300, required=False)
+    oid = c.con.execute("INSERT INTO outcome (agency_id, student_id, school, kind, result, program, conditions, on_date, by) VALUES (?,?,?,?,?,?,?,?,?)",
+                        (c.aid, s["id"], school, kind, result, program, json.dumps(conds, ensure_ascii=False), c.today, c.u["name"])).lastrowid
+    c.log(s["id"], "学校来信", f"{school} {DOC_KINDS[kind]}" + (f"：{result}" if result else "") + (f"，{program}" if program else "")
+          + ("。条件：" + "；".join(x["text"] + (f"（{md(x['due'])}前）" if x["due"] else "") for x in conds) if conds else "")
+          + (f"。原话：“{quote[:120]}”" if quote else "") + f"（{c.u['name']}核对后记录）", who=school, undo={"t": "outcome", "id": oid})
+
+
+def a_found(c, b):
+    s, me = c.student(b.get("student")), c.u["name"]
+    for f in (b.get("found") or [])[:20]:
+        kind = f.get("kind")
+        if kind == "note":                                     # 对不上具体事项，只留痕。按是谁说的分开记
+            t, by = txt(f.get("text") or f.get("quote"), "原话", 300), f.get("by") if f.get("by") in ai.NOTE_BY else "家长"
+            if by == "顾问":
+                c.log(s["id"], "备注", f"备注：“{t}”（{me}录入，不对应具体事项）", who=me, undo={"t": "none"})
+            else:
+                c.log(s["id"], "学校来信" if by == "学校" else "微信回复", f"{by}{'通知' if by == '学校' else '回复'}：“{t}”（从录入的内容识别，{me}确认，不对应具体事项）",
+                      who={"家长": s["parent"], "学生": s["name"], "学校": "学校"}[by], undo={"t": "none"})
+            continue
+        if kind in ("dropschool", "sdl"):                      # 针对整所学校
+            school, q = txt(f.get("school"), "学校", 100), txt(f.get("quote"), "原话", 300, required=False)
+            rows = c.con.execute("SELECT * FROM item WHERE student_id = ? AND agency_id = ? AND school = ? AND deleted = 0", (s["id"], c.aid, school)).fetchall()
+            if not rows:
+                bad("这个学生没有这所学校的事项")
+            if kind == "dropschool":
+                c.con.executemany("UPDATE item SET deleted = 1 WHERE id = ?", [(r["id"],) for r in rows])
+                c.log(s["id"], "移除学校", f"移除 {school}，连同 {len(rows)} 条事项：“{q}”（从录入的内容识别，{me}确认）", who=me, undo={"t": "restore", "ids": [r["id"] for r in rows]})
+                continue
+            new, old = date(f.get("due"), "新的学校截止日"), next((r["sdl"] for r in rows if r["sdl"]), None)
+            if new == old:
+                continue
+            delta = (datetime.strptime(new, "%Y-%m-%d") - datetime.strptime(old, "%Y-%m-%d")).days if old else 0
+            moved = {r["id"]: r["due"] for r in rows if not r["done"]} if delta else {}
+            for i, due in moved.items():
+                c.con.execute("UPDATE item SET due = ? WHERE id = ?", ((datetime.strptime(due, "%Y-%m-%d") + timedelta(days=delta)).strftime("%Y-%m-%d"), i))
+            c.con.executemany("UPDATE item SET sdl = ? WHERE id = ?", [(new, r["id"]) for r in rows])
+            c.log(s["id"], "改截止日", f"{school} 的学校截止日从 {md(old) if old else '未填'} 改为 {md(new)}"
+                  + (f"，{len(moved)} 条未完成的事项一起{'顺延' if delta > 0 else '提前'} {abs(delta)} 天" if moved else "") + f"：“{q}”（从录入的内容识别，{me}确认）",
+                  who=me, undo={"t": "shift", "ids": [r["id"] for r in rows], "sdl": old, "dues": moved})
+            continue
+        it = c.item(f.get("item"))
+        if it["student_id"] != s["id"]:
+            bad("事项不属于这个学生")
+        q = txt(f.get("quote"), "原话", 300, required=False)
+        if f.get("kind") == "replied":
+            d = date(f.get("date") or c.today)
+            c.con.execute("UPDATE item SET replied = ?, reply_text = ? WHERE id = ?", (d, txt(f.get("text"), "原话", 300, required=False) or None, it["id"]))
+            c.log(s["id"], "微信回复", f"家长 {md(d)} 回复：“{q}”（从粘贴的聊天识别，{c.u['name']}确认）", who=s["parent"],
+                  undo={"t": "replied", "id": it["id"], "old": [it["replied"], it["reply_text"]]})
+        elif kind == "owner" and not it["done"] and f.get("owner") in OWNERS and f["owner"] != it["owner"]:
+            c.con.execute("UPDATE item SET owner = ? WHERE id = ?", (f["owner"], it["id"]))
+            c.log(s["id"], "改负责人", f"「{it['what']}」负责人从{it['owner']}改为{f['owner']}：“{q}”（从录入的内容识别，{me}确认）", who=me,
+                  undo={"t": "edit", "id": it["id"], "old": {"what": it["what"], "owner": it["owner"], "due": it["due"]}})
+        elif kind == "restore" and it["cancelled"]:
+            c.con.execute("UPDATE item SET done = NULL, cancelled = NULL WHERE id = ?", (it["id"],))
+            c.log(s["id"], "恢复事项", f"恢复「{it['what']}」（截止 {md(it['due'])}，{md(it['cancelled'])}取消过）：“{q}”（从录入的内容识别，{me}确认）", who=me,
+                  undo={"t": "recancel", "id": it["id"], "old": it["cancelled"]})
+        elif f.get("kind") == "due" and not it["done"]:
+            new = date(f.get("due"), "新截止日")
+            if new != it["due"]:
+                c.con.execute("UPDATE item SET due = ? WHERE id = ?", (new, it["id"]))
+                c.log(s["id"], "改截止日", f"「{it['what']}」截止日从 {md(it['due'])} 改为 {md(new)}：“{q}”（从录入的内容识别，{c.u['name']}确认）", who=c.u["name"],
+                      undo={"t": "due", "id": it["id"], "old": it["due"]})
+        elif f.get("kind") == "cancel" and not it["done"]:
+            c.con.execute("UPDATE item SET done = ?, cancelled = ? WHERE id = ?", (c.today, c.today, it["id"]))
+            c.log(s["id"], "取消事项", f"取消「{it['what']}」（原截止 {md(it['due'])}）：“{q}”（从录入的内容识别，{c.u['name']}确认）", who=c.u["name"], undo={"t": "cancel", "id": it["id"]})
+        elif f.get("kind") == "done" and not it["done"]:
+            c.con.execute("UPDATE item SET done = ? WHERE id = ?", (c.today, it["id"]))
+            c.log(s["id"], "完成", f"完成「{it['what']}」：“{q}”（从粘贴的聊天识别，{c.u['name']}确认）", who=it["owner"], undo={"t": "done", "id": it["id"]})
+
+
+def a_addschool(c, b):
+    s = c.student(b.get("student"))
+    school, rnd = txt(b.get("school"), "学校", 100), txt(b.get("round"), "轮次", 40)
+    deadline = date(b.get("deadline"), "学校截止日")
+    db_deadline = b.get("db_deadline") or None
+    source = txt(b.get("source"), "来源", 200, required=False)
+    reason = txt(b.get("reason"), "改动原因", 200, required=False)
+    steps = b.get("steps") or bad("没有要写入的事项")
+    region = txt(b.get("region"), "地区", 20, required=False) or "其他"
+    rolling = rnd == "滚动录取" or bool(b.get("rolling"))
+    ids = [c.add_item(s["id"], x.get("what"), x.get("owner"), x.get("due"), school, rnd, deadline, region, rolling) for x in steps[:20]]
+    was_done = [i for i, x in zip(ids, steps[:20]) if x.get("done") and x["due"] < c.today]      # 补录：加学校时日期已过、顾问说已办完的
+    for i in was_done:
+        c.con.execute("UPDATE item SET done = due WHERE id = ?", (i,))
+    if db_deadline and db_deadline != deadline:
+        dl = f"日期库是 {db_deadline}，{c.u['name']}改为 {deadline}" + (f"（{reason}）" if reason else "")
+    elif db_deadline:
+        dl = f"截止日 {deadline}（日期库，{c.u['name']}已核对）"
+    elif rnd == "滚动录取" or b.get("rolling"):
+        dl = f"滚动录取，计划递交日 {deadline} 由{c.u['name']}和学生商定"
+    else:
+        dl = f"截止日 {deadline}，{c.u['name']}自填"
+    edited = [x for x in steps if x.get("edited")]
+    c.log(s["id"], "加学校", f"加入 {school}（{region}，{rnd}），{dl}{'，来源：' + source if source else ''}；写入 {len(ids)} 条事项："
+          + "；".join(f"{x['what']} {md(x['due'])}" for x in steps[:20]) + (f"。其中 {len(edited)} 条的截止日由顾问改过" if edited else "")
+          + (f"。其中 {len(was_done)} 条日期已过，{c.u['name']}确认此前已办完，直接记为完成" if was_done else ""),
+          undo={"t": "items", "ids": ids})
+    if b.get("remember") and not db_deadline and not rolling:
+        c.con.execute("INSERT OR REPLACE INTO custom_school (agency_id, school, round, date, by, on_date, src, region) VALUES (?,?,?,?,?,?,?,?)",
+                      (c.aid, school, rnd, deadline, c.u["name"], c.today, source, region))
+
+
+def a_editdue(c, b):
+    it = c.item(b.get("item"))
+    new = date(b.get("due"), "新截止日")
+    if new == it["due"]:
+        bad("日期没有变化")
+    reason = txt(b.get("reason"), "改动原因", 200, required=False)
+    c.con.execute("UPDATE item SET due = ? WHERE id = ?", (new, it["id"]))
+    c.log(it["student_id"], "改截止日", f"「{it['what']}」截止日从 {it['due']} 改为 {new}" + (f"（{reason}）" if reason else ""), undo={"t": "due", "id": it["id"], "old": it["due"]})
+
+
+def a_edititem(c, b):
+    it = c.item(b.get("item"))
+    what, owner, due = txt(b.get("what"), "事项", 120), b.get("owner"), date(b.get("due"), "截止日")
+    if owner not in OWNERS:
+        bad("负责人只能是学生、家长、学校或机构")
+    ch = []
+    if what != it["what"]:
+        ch.append(f"名称改为「{what}」")
+    if owner != it["owner"]:
+        ch.append(f"负责人从{it['owner']}改为{owner}")
+    if due != it["due"]:
+        ch.append(f"截止日从 {it['due']} 改为 {due}")
+    if not ch:
+        bad("没有改动")
+    reason = txt(b.get("reason"), "改动原因", 200, required=False)
+    c.con.execute("UPDATE item SET what = ?, owner = ?, due = ? WHERE id = ?", (what, owner, due, it["id"]))
+    c.log(it["student_id"], "修改事项", f"「{it['what']}」{'，'.join(ch)}" + (f"（{reason}）" if reason else ""),
+          undo={"t": "edit", "id": it["id"], "old": {"what": it["what"], "owner": it["owner"], "due": it["due"]}})
+
+
+def a_removeschool(c, b):
+    s = c.student(b.get("student"))
+    school = txt(b.get("school"), "学校", 100)
+    reason = txt(b.get("reason"), "移除原因", 200, required=False)
+    ids = [r["id"] for r in c.con.execute("SELECT id FROM item WHERE student_id = ? AND agency_id = ? AND school = ? AND deleted = 0", (s["id"], c.aid, school))]
+    if not ids:
+        bad("这个学生没有这所学校的事项")
+    c.con.executemany("UPDATE item SET deleted = 1 WHERE id = ?", [(i,) for i in ids])
+    c.log(s["id"], "移除学校", f"移除 {school}，连同 {len(ids)} 条事项" + (f"，原因：{reason}" if reason else ""), undo={"t": "restore", "ids": ids})
+
+
+def a_cancelitem(c, b):
+    """取消一件事：不删，划掉留在原处，留痕里写明谁在哪天取消的。"""
+    it = c.item(b.get("item"))
+    if it["done"]:
+        bad("这件事已经完成或取消了")
+    reason = txt(b.get("reason"), "取消原因", 200, required=False)
+    c.con.execute("UPDATE item SET done = ?, cancelled = ? WHERE id = ?", (c.today, c.today, it["id"]))
+    c.log(it["student_id"], "取消事项", f"取消「{it['what']}」（原截止 {md(it['due'])}）" + (f"，原因：{reason}" if reason else ""), who=c.u["name"], undo={"t": "cancel", "id": it["id"]})
+
+
+def a_restoreitem(c, b):
+    it = c.item(b.get("item"))
+    if not it["cancelled"]:
+        bad("这件事没有被取消")
+    c.con.execute("UPDATE item SET done = NULL, cancelled = NULL WHERE id = ?", (it["id"],))
+    c.log(it["student_id"], "恢复事项", f"恢复「{it['what']}」（截止 {md(it['due'])}，{md(it['cancelled'])}取消过）", who=c.u["name"], undo={"t": "recancel", "id": it["id"], "old": it["cancelled"]})
+
+
+def a_deleteitem(c, b):
+    it = c.item(b.get("item"))
+    reason = txt(b.get("reason"), "删除原因", 200, required=False)
+    c.con.execute("UPDATE item SET deleted = 1 WHERE id = ?", (it["id"],))
+    c.log(it["student_id"], "删除事项", f"删除「{it['what']}」（原截止 {it['due']}）" + (f"，原因：{reason}" if reason else ""), undo={"t": "undelete", "id": it["id"]})
+
+
+def a_undo(c, b):
+    l = c.con.execute("SELECT * FROM log WHERE id = ? AND agency_id = ?", (b.get("log"), c.aid)).fetchone()
+    if not l or not l["undo"] or l["undone"] or l["user_id"] != c.u["id"]:
+        bad("这条记录不能撤销")
+    if l["student_id"]:
+        c.student(l["student_id"])
+    if l["at"] < (db.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M"):
+        bad("超过 30 分钟的操作不能撤销，请直接修改")
+    u = json.loads(l["undo"])
+    t = u["t"]
+    if t == "chase":
+        c.con.execute("DELETE FROM chase WHERE id = ?", (u["id"],))
+    elif t == "done":
+        c.con.execute("UPDATE item SET done = NULL WHERE id = ? AND agency_id = ?", (u["id"], c.aid))
+    elif t == "cancel":
+        c.con.execute("UPDATE item SET done = NULL, cancelled = NULL WHERE id = ? AND agency_id = ?", (u["id"], c.aid))
+    elif t == "recancel":
+        c.con.execute("UPDATE item SET done = ?, cancelled = ? WHERE id = ? AND agency_id = ?", (u["old"], u["old"], u["id"], c.aid))
+    elif t == "shift":
+        c.con.executemany("UPDATE item SET sdl = ? WHERE id = ? AND agency_id = ?", [(u["sdl"], i, c.aid) for i in u["ids"]])
+        c.con.executemany("UPDATE item SET due = ? WHERE id = ? AND agency_id = ?", [(d, int(i), c.aid) for i, d in u["dues"].items()])
+    elif t == "agreed":
+        c.con.executemany("UPDATE item SET agreed = NULL WHERE id = ? AND agency_id = ?", [(i, c.aid) for i in u["ids"]])
+    elif t == "replied":
+        c.con.execute("UPDATE item SET replied = ?, reply_text = ? WHERE id = ? AND agency_id = ?", (*u["old"], u["id"], c.aid))
+    elif t == "items":
+        c.con.executemany("UPDATE item SET deleted = 1 WHERE id = ? AND agency_id = ?", [(i, c.aid) for i in u["ids"]])
+    elif t == "due":
+        c.con.execute("UPDATE item SET due = ? WHERE id = ? AND agency_id = ?", (u["old"], u["id"], c.aid))
+    elif t == "undelete":
+        c.con.execute("UPDATE item SET deleted = 0 WHERE id = ? AND agency_id = ?", (u["id"], c.aid))
+    elif t == "edit":
+        o = u["old"]
+        c.con.execute("UPDATE item SET what = ?, owner = ?, due = ? WHERE id = ? AND agency_id = ?", (o["what"], o["owner"], o["due"], u["id"], c.aid))
+    elif t == "outcome":
+        c.con.execute("UPDATE outcome SET deleted = 1 WHERE id = ? AND agency_id = ?", (u["id"], c.aid))
+    elif t == "restore":
+        c.con.executemany("UPDATE item SET deleted = 0 WHERE id = ? AND agency_id = ?", [(i, c.aid) for i in u["ids"]])
+    # 留痕不删，只标成"已撤销"，老板仍然看得到
+    c.con.execute("UPDATE log SET undone = 1 WHERE id = ?", (l["id"],))
+
+
+def a_addstudent(c, b):
+    name, parent = txt(b.get("name"), "学生称呼", 30), txt(b.get("parent"), "家长称呼", 30)
+    cid = int(b.get("consultant") or c.u["id"]) if c.u["role"] == "owner" else c.u["id"]
+    if not c.con.execute("SELECT 1 FROM user WHERE id = ? AND agency_id = ? AND active = 1", (cid, c.aid)).fetchone():
+        bad("找不到这个顾问")
+    if c.con.execute("SELECT 1 FROM student WHERE agency_id = ? AND name = ?", (c.aid, name)).fetchone():
+        bad("已经有同名学生了，可以加个区分，比如“张同学 A”")
+    sid = c.con.execute("INSERT INTO student (agency_id, name, parent, consultant_id, created) VALUES (?,?,?,?,?)",
+                        (c.aid, name, parent, cid, c.today)).lastrowid
+    cname = c.con.execute("SELECT name FROM user WHERE id = ?", (cid,)).fetchone()[0]
+    c.log(sid, "学生", f"新建学生 {name}，家长称呼 {parent}，负责顾问 {cname}")
+
+
+def a_archivestudent(c, b):
+    s = c.student(b.get("student"))
+    c.con.execute("UPDATE student SET archived = 1 WHERE id = ?", (s["id"],))
+    c.log(s["id"], "学生", f"{s['name']} 已结案（不再显示，记录保留）")
+
+
+def a_forget(c, b):
+    school = txt(b.get("school"), "学校", 100)
+    c.con.execute("DELETE FROM custom_school WHERE agency_id = ? AND school = ?", (c.aid, school))
+    c.log(None, "学校记忆", f"删除自填学校 {school} 的日期")
+
+
+def a_adduser(c, b):
+    owner_only(c)
+    name, lg, pw = txt(b.get("name"), "姓名", 20), txt(b.get("login"), "登录名", 40), str(b.get("password") or "")
+    if len(pw) < 8:
+        bad("密码至少 8 位")
+    if c.con.execute("SELECT 1 FROM user WHERE login = ?", (lg,)).fetchone():
+        bad("这个登录名已被使用")
+    role = "owner" if b.get("role") == "owner" else "consultant"
+    c.con.execute("INSERT INTO user (agency_id, name, login, pw, role) VALUES (?,?,?,?,?)", (c.aid, name, lg, db.hash_pw(pw), role))
+    c.log(None, "账号", f"新建{'老板' if role == 'owner' else '顾问'}账号：{name}")
+
+
+def a_setpw(c, b):
+    target = int(b.get("user") or c.u["id"])
+    if target != c.u["id"]:
+        owner_only(c)
+    pw = str(b.get("password") or "")
+    if len(pw) < 8:
+        bad("密码至少 8 位")
+    r = c.con.execute("UPDATE user SET pw = ? WHERE id = ? AND agency_id = ?", (db.hash_pw(pw), target, c.aid))
+    if not r.rowcount:
+        bad("找不到这个账号")
+    c.con.execute("DELETE FROM session WHERE user_id = ? AND token != ?", (target, c.u.get("_tok", "")))
+    c.log(None, "账号", "修改了密码" if target == c.u["id"] else "重置了一个顾问的密码")
+
+
+def a_deactivate(c, b):
+    owner_only(c)
+    target = int(b.get("user") or 0)
+    if target == c.u["id"]:
+        bad("不能停用自己的账号")
+    c.con.execute("UPDATE user SET active = 0 WHERE id = ? AND agency_id = ?", (target, c.aid))
+    c.con.execute("DELETE FROM session WHERE user_id = ?", (target,))
+    c.log(None, "账号", "停用了一个账号")
+
+
+def responsible(c, s):
+    if c.u["role"] != "owner" and c.u["id"] != s["consultant_id"]:
+        bad("只有当前负责顾问或机构负责人能操作", 403)
+
+
+def a_promise(c, b):
+    it = c.item(b.get("item"))
+    responsible(c, c.student(it["student_id"]))
+    if it["done"] or it["owner"] not in FAM:
+        bad("请选择学生或家长尚未办完的事项")
+    quote, day, check = txt(b.get("quote"), "承诺", 180), date(b.get("promised")), date(b.get("review"))
+    if check < c.today or check < day or check > it["due"]:
+        bad("复查日不能早于今天或承诺日，也不能晚于截止日")
+    c.con.execute("INSERT OR REPLACE INTO followup VALUES (?,?,?,?,NULL)", (it["id"], quote, day, check))
+    c.log(it["student_id"], "承诺", f"「{it['what']}」{it['owner']}承诺：{quote}（{day}）；{check} 复查，未标完成")
+
+
+def a_review(c, b):
+    it = c.item(b.get("item"))
+    responsible(c, c.student(it["student_id"]))
+    check = date(b.get("review"))
+    if it["done"] or not c.con.execute("SELECT 1 FROM followup WHERE item_id=?", (it["id"],)).fetchone():
+        bad("事项未在复查队列中")
+    if check <= c.today or check > it["due"]:
+        bad("请选择今天之后且不晚于截止日的复查日期")
+    c.con.execute("UPDATE followup SET review_on=?, last_checked=? WHERE item_id=?", (check, c.today, it["id"]))
+    c.log(it["student_id"], "复查", f"已跟进「{it['what']}」，仍待{it['owner']}；下次复查 {check}")
+
+
+def a_handoff(c, b):
+    s = c.student(b.get("student"))
+    responsible(c, s)
+    dest = c.con.execute("SELECT id,name FROM user WHERE agency_id=? AND id=? AND active=1 AND role='consultant'", (c.aid, b.get("to"))).fetchone()
+    if not dest or dest["id"] == s["consultant_id"]:
+        bad("请选择另一位在职顾问")
+    c.con.execute("UPDATE student SET consultant_id=? WHERE id=?", (dest["id"], s["id"]))
+    c.log(s["id"], "交接", f"学生负责人变更为{dest['name']}；未结事项随学生移交")
+
+
+ACTIONS = {k[2:]: v for k, v in globals().items() if k.startswith("a_")}
+
+
+if DEMO:
+    def seed(con):
+        con.execute("INSERT INTO agency VALUES(1,'岸桥留学 · 虚构机构',?)", (DAY1,))
+        for uid, nm, role in ((1, "王老师", "consultant"), (2, "陈老师", "consultant"), (3, "周主管", "owner")):
+            con.execute("INSERT INTO user VALUES(?,1,?,?,?,?,1)", (uid,nm,f"demo-{uid}","disabled",role))
+        con.execute("INSERT INTO student VALUES(1,1,'林同学','林妈妈',1,0,?)", (DAY1,))
+
+    def switch(con, response, uid):
+        tok = secrets.token_urlsafe(32)
+        con.execute("INSERT INTO session VALUES(?,?,?)", (tok, uid, "2099-01-01 00:00"))
+        response.set_cookie("roadshow_sid", tok, httponly=True, samesite="strict")
+        return {"ok": True}
+
+    @app.post("/api/demo/start")
+    def demo_start(response: Response):
+        with db.connect() as con:
+            if not con.execute("SELECT 1 FROM agency").fetchone():
+                seed(con)
+            return switch(con, response, 2 if demo_day == DAY2 else 1)
+
+    @app.post("/api/demo/reset")
+    def demo_reset(response: Response, u=Depends(current_user)):
+        global demo_day
+        with db.connect() as con:
+            # Only reachable in the throwaway single-presenter process created by run.py.
+            for table in ("followup","chase","outcome","log","item","student","session","custom_school","user","agency"):
+                con.execute(f"DELETE FROM {table}")
+            seed(con)
+            demo_day = DAY1
+            return switch(con, response, 1)
+
+    @app.post("/api/demo/tomorrow")
+    def demo_tomorrow(response: Response, u=Depends(current_user)):
+        global demo_day
+        with db.connect() as con:
+            if demo_day != DAY1 or u["id"] != 1 or not con.execute(
+                "SELECT 1 FROM student s JOIN item i ON i.student_id=s.id JOIN followup f ON f.item_id=i.id WHERE s.id=1 AND s.consultant_id=2 AND i.deleted=0 AND i.done IS NULL").fetchone():
+                bad("请先记录承诺，并把林同学移交给陈老师")
+            demo_day = DAY2
+            return switch(con, response, 2)
+
+
+@app.post("/api/act")
+async def act(request: Request, u=Depends(current_user)):
+    b = await request.json()
+    fn = ACTIONS.get(b.get("op")) or bad("未知操作")
+    u["_tok"] = request.cookies.get("roadshow_sid", "")
+    with db.connect() as con:
+        fn(Ctx(con, u), b)
+    return state(u)
+
+
+# ------------------------------------------------------------------ AI 整理
+@app.post("/api/extract")
+async def extract(request: Request, u=Depends(current_user)):
+    b = await request.json()
+    images = b.get("images") or []
+    if not isinstance(images, list) or len(images) > 4:
+        bad("一次最多 4 张图片")
+    for im in images:
+        if not isinstance(im, str) or not re.match(r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$", im) or len(im) > 4_000_000:
+            bad("图片格式不对，请换一张（jpg、png）")
+    text = txt(b.get("text"), "内容", 12000, required=not images)
+    with db.connect() as con:
+        s = Ctx(con, u).student(b.get("student"))
+        open_items = [dict(r) for r in con.execute("SELECT id, what, owner, due, cancelled FROM item WHERE student_id = ? AND deleted = 0 AND (done IS NULL OR cancelled IS NOT NULL)", (s["id"],))]
+        schools = [r[0] for r in con.execute("SELECT DISTINCT school FROM item WHERE student_id = ? AND deleted = 0 AND school IS NOT NULL", (s["id"],))]
+    if DEMO:
+        if text.strip() != MAIL or images:
+            bad("离线演示仅识别内置邮件；其他内容请手动记录")
+        return {"newItems": [{"what": "补交英文成绩单", "school": SCHOOL, "owner": "学生", "due": "2026-11-20", "quote": MAIL}],
+                "doc": {"type":"补材料", "school":SCHOOL, "program":"", "result":"", "conditions":[], "quote":MAIL}, "found":[], "dropped":0}
+    if not ai.enabled():
+        bad("还没有配置 AI 服务，请用手动添加")
+    if images and not ai.images_enabled():
+        bad("还没有开通图片识别，请把文字贴进来")
+    try:
+        return ai.extract(text, s["name"], s["parent"], open_items, db.today(), images, schools)
+    except ai.AIError as e:
+        bad(str(e), 502)
+
+
+# ------------------------------------------------------------------ 导出（老板）
+@app.get("/api/export.csv")
+def export(kind: str = "items", u=Depends(current_user)):
+    if u["role"] != "owner":
+        bad("只有老板账号能导出", 403)
+    st = state(u)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    if kind == "logs":
+        w.writerow(["日期", "时间", "学生", "谁", "类型", "内容", "已撤销"])
+        for l in reversed(st["logs"]):
+            w.writerow([l["date"], l["time"], l["student"], l["who"], l["src"], l["act"], "是" if l["undone"] else ""])
+    else:
+        w.writerow(["学生", "事项", "负责", "截止", "录入", "约定", "家长回复", "提醒次数", "完成", "学校"])
+        for i in st["items"]:
+            w.writerow([i["student"], i["what"], i["owner"], i["due"], i["created"], i["agreed"] or "", i["replied"] or "", len(i["chases"]), i["done"] or "", i["school"] or ""])
+    data = "﻿" + buf.getvalue()
+    name = f"{'留痕' if kind == 'logs' else '事项'}-{db.today()}.csv"
+    return StreamingResponse(iter([data]), media_type="text/csv; charset=utf-8",
+                             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{__import__('urllib.parse').parse.quote(name)}"})
