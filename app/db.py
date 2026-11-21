@@ -59,6 +59,16 @@ def init():
             con.execute("ALTER TABLE item ADD COLUMN cancelled TEXT")
         if "rolling" not in have("item"):
             con.execute("ALTER TABLE item ADD COLUMN rolling INTEGER NOT NULL DEFAULT 0")
+        for col, typ in (("kind", "TEXT"), ("assignee", "INTEGER")):        # kind = 'material'：学生要交的材料；assignee：机构事项具体由哪位老师负责
+            if col not in have("item"):
+                con.execute(f"ALTER TABLE item ADD COLUMN {col} {typ}")
+        for col in ("writer_id", "mentor_id"):                              # 一个学生除了负责顾问，还有文书老师、班主任
+            if col not in have("student"):
+                con.execute(f"ALTER TABLE student ADD COLUMN {col} INTEGER")
+        # 学生或家长说"我今晚发你"：记下承诺和顾问复查日，不等于完成
+        con.execute("""CREATE TABLE IF NOT EXISTS followup (
+            item_id INTEGER PRIMARY KEY REFERENCES item(id), promise TEXT NOT NULL, promised_on TEXT NOT NULL,
+            review_on TEXT NOT NULL, last_checked TEXT)""")
         if "region" not in have("custom_school"):
             con.execute("ALTER TABLE custom_school ADD COLUMN region TEXT NOT NULL DEFAULT ''")
 

@@ -368,3 +368,86 @@ def test_ai_check_new_kinds():
     ]}, text, items, ["KCL", "LSE"])
     got = [(f["kind"], f.get("item") or f.get("school")) for f in out["found"]]
     assert got == [("owner", 1), ("restore", 2), ("dropschool", "KCL"), ("sdl", "LSE")], (got, out.get("dropped"))
+
+
+# ------------------------------------------------------------------ 分工、材料清单、承诺复查、交接、服务记录
+@pytest.fixture(scope="module")
+def team():
+    make_agency("丙", "boss_c")
+    boss = client("boss_c")
+    for name, lg in (("李顾问", "li"), ("周文书", "zhou"), ("吴班主任", "wu"), ("郑顾问", "zheng")):
+        st = act(boss, "adduser", name=name, login=lg, password="password3")
+    uid = {u["name"]: u["id"] for u in st["users"]}
+    st = act(boss, "addstudent", name="陈同学", parent="陈爸爸", consultant=uid["李顾问"])
+    sid = next(s["id"] for s in st["students"] if s["name"] == "陈同学")
+    return boss, uid, sid
+
+
+def test_setstaff_and_assignee_default(team):
+    boss, uid, sid = team
+    li = client("li", "password3")
+    st = act(li, "setstaff", student=sid, writer=uid["周文书"], mentor=uid["吴班主任"])
+    s = next(s for s in st["students"] if s["id"] == sid)
+    assert s["writer"] == "周文书" and s["mentor"] == "吴班主任"
+    assert "文书老师：周文书" in st["logs"][0]["act"]
+    st = act(li, "additems", student=sid, items=[{"what": "UCAS 递交", "owner": "机构", "due": "2027-01-10"}])
+    it = next(i for i in st["items"] if i["what"] == "UCAS 递交")
+    assert it["assigneeName"] == "吴班主任"                         # 机构事项默认落到班主任
+    st = act(li, "edititem", item=it["id"], what=it["what"], owner="机构", due=it["due"], assignee=uid["周文书"])
+    assert next(i for i in st["items"] if i["id"] == it["id"])["assigneeName"] == "周文书"
+    assert "具体负责老师从吴班主任改为周文书" in st["logs"][0]["act"]
+    wu = client("wu", "password3")                                   # 班主任不能改分工
+    assert wu.post("/api/act", json={"op": "setstaff", "student": sid, "writer": None}, headers=H).status_code == 403
+
+
+def test_materials_and_agreed_ids(team):
+    boss, uid, sid = team
+    li = client("li", "password3")
+    st = act(li, "additems", student=sid, kind="material", items=[{"what": "护照首页扫描件", "owner": "家长", "due": "2026-12-05"},
+                                                                  {"what": "高中成绩单（中英文）", "owner": "学生", "due": "2026-12-05"}])
+    mats = [i for i in st["items"] if i["kind"] == "material"]
+    assert len(mats) == 2 and all(i["owner"] == "学生" for i in mats)    # 材料一律由学生交
+    act(li, "additems", student=sid, items=[{"what": "付申请费", "owner": "家长", "due": "2026-12-20"}])
+    st = act(li, "agreed", student=sid, ids=[m["id"] for m in mats])
+    assert "已发材料清单给学生" in st["logs"][0]["act"]
+    fee = next(i for i in st["items"] if i["what"] == "付申请费")
+    assert not fee["agreed"]                                          # 没写进这条消息的事项不算已发
+
+
+def test_promise_review_and_undo(team):
+    boss, uid, sid = team
+    wu = client("wu", "password3")                                   # 班主任可以记承诺
+    st = act(wu, "additems", student=sid, items=[{"what": "交雅思成绩单", "owner": "学生", "due": "2099-12-31"}])
+    iid = next(i["id"] for i in st["items"] if i["what"] == "交雅思成绩单")
+    st = act(wu, "promise", item=iid, quote="我今晚发您", promised=db.today(), review=db.today())
+    it = next(i for i in st["items"] if i["id"] == iid)
+    assert it["follow"]["promise"] == "我今晚发您" and not it["done"]
+    r = wu.post("/api/act", json={"op": "review", "item": iid, "review": db.today()}, headers=H)
+    assert r.status_code == 400                                       # 下次复查必须在今天之后
+    nxt = (db.now() + server.timedelta(days=2)).strftime("%Y-%m-%d")
+    st = act(wu, "review", item=iid, review=nxt)
+    assert next(i for i in st["items"] if i["id"] == iid)["follow"]["review_on"] == nxt
+    st = act(wu, "undo", log=st["logs"][0]["id"])
+    assert next(i for i in st["items"] if i["id"] == iid)["follow"]["review_on"] == db.today()
+
+
+def test_handoff_moves_student_and_assignees(team):
+    boss, uid, sid = team
+    li = client("li", "password3")
+    st = act(li, "setstaff", student=sid, mentor=None)
+    st = act(li, "additems", student=sid, items=[{"what": "送托福成绩", "owner": "机构", "due": "2027-01-02"}])
+    assert next(i for i in st["items"] if i["what"] == "送托福成绩")["assigneeName"] == "李顾问"
+    st = act(li, "handoff", student=sid, to=uid["郑顾问"])
+    s = next(s for s in st["students"] if s["id"] == sid)
+    assert s["consultant"] == "郑顾问" and s["handed"]
+    assert next(i for i in st["items"] if i["what"] == "送托福成绩")["assigneeName"] == "郑顾问"
+    r = li.post("/api/act", json={"op": "handoff", "student": sid, "to": uid["李顾问"]}, headers=H)
+    assert r.status_code == 403                                       # 交出去以后，原顾问不能再改
+
+
+def test_record_page(team, setup):
+    boss, uid, sid = team
+    r = boss.get(f"/record/{sid}")
+    assert r.status_code == 200 and "陈同学 申请服务记录" in r.text and "交接" in r.text
+    a, wang, other = setup
+    assert a.get(f"/record/{sid}").status_code == 404                # 别的机构看不到
