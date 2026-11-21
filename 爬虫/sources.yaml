@@ -35,3 +35,8 @@ sources:
   - {name: University of Melbourne, type: watch, url: "https://study.unimelb.edu.au/how-to-apply/undergraduate-study/international-applications/entry-requirements/important-dates"}
   - {name: Monash University, type: watch, url: "https://www.monash.edu/admissions/apply/international-ug"}
   - {name: Adelaide University, type: watch, url: "https://adelaide.edu.au/study/international-students/how-to-apply/"}
+
+  # ---------- 加拿大 ----------
+  - {name: University of Toronto, type: watch, url: "https://future.utoronto.ca/apply/important-application-dates"}
+  - {name: University of Waterloo, type: watch, url: "https://uwaterloo.ca/future-students/admissions/application-deadlines"}
+  # UBC、McGill：2026-11-21 查官网，还没有写明 2027 入学的日期（UBC 只写"1 月 15 日，另有说明除外"，McGill 页面还是 2026），等官网更新后再加。
